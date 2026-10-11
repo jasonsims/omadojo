@@ -28,7 +28,7 @@ function keyName(e){const c=e.code||'';
 
 /* ---------- config & progress ---------- */
 const CFG=Object.assign({theme:'auto',sound:true,standin:null,input:null,decks:['basics','tiling','workspaces'],mode:'learn',wp:0,best:0,done:[]},store.get('cfg',{}));
-if(!CFG.input)CFG.input=matchMedia('(pointer:coarse)').matches?'taps':'keys';
+if(!CFG.input)CFG.input=typeof matchMedia==='function'&&matchMedia('(pointer:coarse)').matches?'taps':'keys';
 const saveCfg=()=>store.set('cfg',CFG);
 let PROG=store.get('prog',{});
 const P=id=>PROG[id]||(PROG[id]={l:0,n:0,ok:0,ms:0});
@@ -37,7 +37,8 @@ const saveProg=()=>store.set('prog',PROG);
 /* ---------- themes ---------- */
 const THEMES=[['auto','System'],['tokyo-night','Tokyo Night'],['catppuccin','Catppuccin'],['gruvbox','Gruvbox'],['everforest','Everforest'],['nord','Nord'],
   ['rose-pine','Rosé Pine'],['kanagawa','Kanagawa'],['matte-black','Matte Black'],['catppuccin-latte','Catppuccin Latte'],['flexoki-light','Flexoki Light']];
-function applyTheme(id){if(!THEMES.some(t=>t[0]===id))id='auto';CFG.theme=id;saveCfg();const r=document.documentElement;
+function setTheme(id){if(!THEMES.some(t=>t[0]===id))id='auto';CFG.theme=id;saveCfg();return id}
+function applyTheme(id){id=setTheme(id);const r=document.documentElement;
   if(id==='auto')r.removeAttribute('data-om');else r.setAttribute('data-om',id);
   $('#bTheme').textContent='Theme: '+THEMES.find(t=>t[0]===id)[1]}
 
@@ -74,9 +75,11 @@ const APPS={
 };
 
 /* ---------- desktop state ---------- */
+// Side effects the model asks for. Boot wires these to the view; outside a browser they do nothing.
+const effects={osd(){},render(){},theme(){}};
 const mkWs=()=>({slots:[],floats:[],focus:null,layout:'dwindle',flips:{},ratios:{},colW:{},scroll:0});
 let S,NID=1;
-function fresh(){S={ws:{1:mkWs(),2:mkWs(),3:mkWs(),4:mkWs(),S:mkWs()},cur:1,prev:2,scratch:false,pinned:[],wins:{},
+function fresh(){S={ws:{1:mkWs(),2:mkWs(),3:mkWs(),4:mkWs(),S:mkWs()},cur:1,prev:2,scratch:false,pinned:[],wins:{},dying:[],
   bar:true,gaps:true,dfull:false,night:false,silent:false,zoom:1,overlay:null,ovIdx:0,notifs:[],hist:[],clip:['ssh-ed25519 AAAA…','https://omarchy.org/manual/','hl.bind("SUPER + J", …)'],slideDir:0,osd:''}}
 fresh();
 const curWs=()=>S.scratch?S.ws.S:S.ws[S.cur];
@@ -105,7 +108,7 @@ function detach(id){const L=locate(id);
     if(!sl.wins.length)ws.slots.splice(L.si,1);else{sl.active=Math.min(sl.active,sl.wins.length-1);if(ws.focus===id)ws.focus=sl.wins[sl.active]}}
   if(ws.focus===id){const t=tiled(ws);ws.focus=t.length?t[Math.min(L.si??t.length-1,t.length-1)]:(ws.floats.slice(-1)[0]??null)}
   return L}
-function closeWin(id){if(id==null)return false;detach(id);const el=winEls.get(id);if(el){el.classList.add('dying');winEls.delete(id);setTimeout(()=>el.remove(),180)}delete S.wins[id];return true}
+function closeWin(id){if(id==null)return false;detach(id);S.dying.push(id);delete S.wins[id];return true}
 function gotoWs(n){if(S.scratch){S.scratch=false}if(n===S.cur)return;S.slideDir=n>S.cur?1:-1;S.prev=S.cur;S.cur=n}
 function moveTo(n,follow){const id=focusId();if(id==null||S.pinned.includes(id))return false;const L=detach(id);const t=S.ws[n];
   if(L.fl)t.floats.push(id);else t.slots.push({wins:[id],active:0,grouped:false});t.focus=id;W(id).full=0;
@@ -113,23 +116,26 @@ function moveTo(n,follow){const id=focusId();if(id==null||S.pinned.includes(id))
 function toScratch(){const id=focusId();if(id==null||S.scratch)return false;const L=detach(id);const t=S.ws.S;if(L.fl)t.floats.push(id);else t.slots.push({wins:[id],active:0,grouped:false});t.focus=id;return true}
 
 /* geometry (normalized to the work area) */
-let DIM={W:960,H:600,bar:22};
-const AR=()=>DIM.W/Math.max(1,DIM.H-DIM.bar);
+let ASPECT=960/578;// work area width / height; the view keeps it in sync with the screen
+const setAspect=a=>{ASPECT=a};
 function tileRects(ws){const ids=tiled(ws),out={},orient={};
   if(ws.layout==='scrolling'){let x=0;const pos={};const cw=id=>ids.length===1?1:(ws.colW[id]||.6);
     ids.forEach(id=>{pos[id]=x;x+=cw(id)});const f=ws.focus;
     if(pos[f]!=null){if(pos[f]<ws.scroll)ws.scroll=pos[f];if(pos[f]+cw(f)>ws.scroll+1)ws.scroll=pos[f]+cw(f)-1}
     ws.scroll=Math.max(0,Math.min(ws.scroll,Math.max(0,x-1)));
     ids.forEach(id=>out[id]={x:pos[id]-ws.scroll,y:0,w:cw(id),h:1});return{rects:out,orient}}
-  let r={x:0,y:0,w:1,h:1};const ar=AR();
+  let r={x:0,y:0,w:1,h:1};const ar=ASPECT;
   ids.forEach((id,i)=>{if(i===ids.length-1){out[id]=r;return}
     let side=r.w*ar>=r.h;if(ws.flips[i])side=!side;orient[i]=side?'h':'v';const k=ws.ratios[i]??.5;
     if(side){out[id]={x:r.x,y:r.y,w:r.w*k,h:r.h};r={x:r.x+r.w*k,y:r.y,w:r.w*(1-k),h:r.h}}
     else{out[id]={x:r.x,y:r.y,w:r.w,h:r.h*k};r={x:r.x,y:r.y+r.h*k,w:r.w,h:r.h*(1-k)}}});
   return{rects:out,orient}}
-const floatRect=(i,id)=>{const a=W(id)?.app;const w=a==='calc'?.26:.5,h=a==='calc'?.5:.55;return{x:.25+.05*i,y:.14+.06*i,w,h}};
+const floatRect=(i,a)=>{const w=a==='calc'?.26:.5,h=a==='calc'?.5:.55;return{x:.25+.05*i,y:.14+.06*i,w,h}};
 function neighbor(dir){const ws=curWs();const f=focusId();if(f==null)return null;const{rects}=tileRects(ws);
-  let fr=rects[f];const fi=ws.floats.indexOf(f);if(!fr&&fi>=0)fr=floatRect(fi,f);if(!fr)return null;
+  let fr=rects[f];const fi=ws.floats.indexOf(f);if(!fr&&fi>=0)fr=floatRect(fi,W(f).app);if(!fr)return null;
+  return nearest(rects,f,fr,dir)}
+// The tiled window nearest to rect fr (window f) in a direction, or null.
+function nearest(rects,f,fr,dir){
   const e=.002,cx=fr.x+fr.w/2,cy=fr.y+fr.h/2;let best=null,bs=1e9;
   for(const k of Object.keys(rects)){const id=+k;if(id===f)continue;const r=rects[k];
     const oy=r.y<fr.y+fr.h-e&&r.y+r.h>fr.y+e,ox=r.x<fr.x+fr.w-e&&r.x+r.w>fr.x+e;let ok=false,d=0;
@@ -141,11 +147,10 @@ function neighbor(dir){const ws=curWs();const f=focusId();if(f==null)return null
   return best}
 
 /* ---------- UI feedback inside the screen ---------- */
-let osdT;
-function osd(t){S.osd=t;const o=$('#osd');o.textContent=t;o.classList.add('on');clearTimeout(osdT);osdT=setTimeout(()=>o.classList.remove('on'),1100)}
+function osd(t){S.osd=t;effects.osd(t)}
 let nidN=1;
 function notify(title,body,ttl){if(S.silent)return;const n={id:nidN++,title,body};S.notifs.unshift(n);S.hist.unshift(n);if(S.notifs.length>3)S.notifs.pop();
-  if(ttl)setTimeout(()=>{const i=S.notifs.indexOf(n);if(i>=0){S.notifs.splice(i,1);renderScreen()}},ttl)}
+  if(ttl)setTimeout(()=>{const i=S.notifs.indexOf(n);if(i>=0){S.notifs.splice(i,1);effects.render()}},ttl)}
 
 /* ---------- actions ---------- */
 const ACTS=[],BIND={};
@@ -267,6 +272,10 @@ act('reminder','system',['super+ctrl+r'],'Set a reminder',toggleOv('reminder'),{
 act('zoom','system',['super+ctrl+z'],'Zoom in',()=>{S.zoom=Math.min(2.2,S.zoom+.3)},{drill:false});
 act('zoomout','system',['super+ctrl+alt+z'],'Zoom out',()=>{S.zoom=1},{drill:false});
 
+// Run an action the way a key press does: anything but another menu closes the open one.
+const MENUS=['menu','appsmenu','sysmenu','keys','clipmgr','theme','emoji','capture','hardware','reminder','nhist'];
+function runAction(a){if(!MENUS.includes(a.id)&&!a.id.startsWith('panel-'))S.overlay=null;a.run()}
+
 /* ---------- drill preconditions ---------- */
 function closeOverlay(){S.overlay=null}
 function trim(max){const ws=S.ws[S.cur];while(ws.slots.length>max){const sl=ws.slots[0];[...sl.wins].forEach(id=>closeWin(id))}while(ws.floats.length>1)closeWin(ws.floats[0])}
@@ -303,15 +312,18 @@ function ovNav(c){
   if(c==='down')S.ovIdx=(S.ovIdx+1)%it.length;
   if(c==='up')S.ovIdx=(S.ovIdx-1+it.length)%it.length;
   if(c==='return'){const pick=it[S.ovIdx];
-    if(S.overlay==='theme'){applyTheme(THEMES[S.ovIdx+1][0]);osd('Theme: '+THEMES[S.ovIdx+1][1])}
+    if(S.overlay==='theme'){effects.theme(THEMES[S.ovIdx+1][0]);osd('Theme: '+THEMES[S.ovIdx+1][1])}
     else osd((Array.isArray(pick)?pick[0]:pick)+(S.overlay==='clip'?' pasted':''));
     S.overlay=null}}
 
 /* ---------- rendering the screen ---------- */
+let DIM={W:960,H:600,bar:22};
+let osdT;
+function showOsd(t){const o=$('#osd');o.textContent=t;o.classList.add('on');clearTimeout(osdT);osdT=setTimeout(()=>o.classList.remove('on'),1100)}
 const winEls=new Map();
 const REDUCED=matchMedia('(prefers-reduced-motion: reduce)').matches;
 function measure(){const r=$('#screen').getBoundingClientRect();const bar=Math.round(Math.max(15,Math.min(26,r.width*.027)));DIM={W:r.width||960,H:r.height||600,bar};
-  $('#screen').style.setProperty('--barh',bar+'px')}
+  setAspect(DIM.W/Math.max(1,DIM.H-DIM.bar));$('#screen').style.setProperty('--barh',bar+'px')}
 function renderScreen(){
   const scr=$('#screen');scr.className='screen'+(CFG.wp?' wp'+CFG.wp:'');
   $('#zoomer').style.transform=S.zoom>1?`scale(${S.zoom})`:'';
@@ -322,15 +334,16 @@ function renderScreen(){
   const place=(id,r,z,area=work,slot=null)=>want.set(id,{x:area.x+r.x*area.w+gap,y:area.y+r.y*area.h+gap,w:r.w*area.w-2*gap,h:r.h*area.h-2*gap,z,slot});
   const{rects}=tileRects(ws);
   ws.slots.forEach(sl=>{const id=sl.wins[sl.active];if(rects[id])place(id,rects[id],10,work,sl)});
-  ws.floats.forEach((id,i)=>place(id,floatRect(i,id),30));
+  ws.floats.forEach((id,i)=>place(id,floatRect(i,W(id).app),30));
   S.pinned.forEach((id,i)=>place(id,{x:.64,y:.04+i*.3,w:.34,h:.32},45));
   if(S.scratch){const sw=S.ws.S;const{rects:sr}=tileRects(sw);const n=sw.slots.length;const area=n<=1?{x:work.x+work.w*.2,y:work.y,w:work.w*.6,h:work.h*.62}:{x:work.x+work.w*.02,y:work.y,w:work.w*.96,h:work.h*.66};
-    sw.slots.forEach(sl=>{const id=sl.wins[sl.active];if(sr[id])place(id,sr[id],60,area,sl)});sw.floats.forEach((id,i)=>place(id,floatRect(i,id),62))}
+    sw.slots.forEach(sl=>{const id=sl.wins[sl.active];if(sr[id])place(id,sr[id],60,area,sl)});sw.floats.forEach((id,i)=>place(id,floatRect(i,W(id).app),62))}
   for(const[id,p]of want){const w=W(id);if(w.full===1&&!S.scratch){p.x=0;p.y=0;p.w=DIM.W;p.h=DIM.H;p.z=50}
     else if(w.full===2&&!S.scratch){p.x=gap;p.y=work.y+gap;p.w=work.w-2*gap;p.h=work.h-2*gap;p.z=40}}
   $('#scrim').classList.toggle('on',S.scratch);
   const holder=$('#wins');
-  for(const[id,el]of winEls)if(!want.has(id)){el.remove();winEls.delete(id)}
+  const dying=new Set(S.dying);S.dying=[];
+  for(const[id,el]of winEls)if(!want.has(id)){winEls.delete(id);if(dying.has(id)){el.classList.add('dying');setTimeout(()=>el.remove(),180)}else el.remove()}
   const slide=S.slideDir;S.slideDir=0;
   for(const[id,p]of want){const w=W(id);let el=winEls.get(id);
     if(!el){el=document.createElement('div');el.className='win';holder.appendChild(el);winEls.set(id,el);
@@ -388,8 +401,7 @@ function press(combo,src){
   if(S.overlay&&['up','down','return','escape'].includes(combo)){ovNav(combo);cast(combo,combo==='escape'?'Close':combo==='return'?'Select':'Move',false);after(combo,null);renderScreen();return true}
   const a=BIND[combo];
   if(!a){if(combo.includes('super')){cast(combo,'not bound in Omarchy',true);after(combo,null);return true}stray(combo);return false}
-  if(!['menu','appsmenu','sysmenu','keys','clipmgr','theme','emoji','capture','hardware','reminder','nhist'].includes(a.id)&&!a.id.startsWith('panel-'))S.overlay=null;
-  a.run();cast(combo,a.label,false);after(combo,a);renderScreen();return true}
+  runAction(a);cast(combo,a.label,false);after(combo,a);renderScreen();return true}
 
 /* ---------- coach engines ---------- */
 const D={item:null,t0:0,revealed:false,missed:false,cool:false,streak:0,right:0,tries:0,last:[],fb:'',fbc:'',tip:false,opts:null,timers:[],blitz:null,wrongOpt:null};
@@ -642,6 +654,7 @@ new ResizeObserver(()=>{measure();renderScreen()}).observe($('#screen'));
 setInterval(()=>{if(!S.overlay||S.overlay==='lock')renderScreen()},30000);
 
 /* ---------- boot ---------- */
+Object.assign(effects,{osd:showOsd,render:renderScreen,theme:applyTheme});
 applyTheme(CFG.theme);
 if(!CFG.seenSetup){CFG.seenSetup=true;saveCfg();if(!matchMedia('(pointer:coarse)').matches)openSetup(true)}$('#bSound').textContent=CFG.sound?'Sound on':'Sound off';renderSetup();
 measure();
