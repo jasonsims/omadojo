@@ -82,7 +82,7 @@ function cast(combo,label,bad){castLog.unshift({combo,label,bad});castLog.length
   $('#cast').innerHTML=castLog.map(c=>`<span class="ev">${caps(c.combo)}<span class="lbl${c.bad?' bad':''}">${esc(c.label)}</span></span>`).join('');
   freeLog.unshift({combo,label,bad});freeLog.length=Math.min(freeLog.length,14);if(CFG.mode==='free')renderCoach()}
 const freeLog=[];
-const held=new Set();let firedWhileHeld=false;
+const held=new Set();
 function mods(){const m=new Set();for(const c of held){if(c===CFG.standin){m.add('super');continue}const k=MODCODE[c];if(k)m.add(k)}return m}
 function renderMods(){const m=mods();document.querySelectorAll('#mods span').forEach(s=>s.classList.toggle('on',m.has(s.dataset.m)))}
 function prune(e){const drop=(codes,flag)=>{if(!flag)codes.forEach(c=>{if(c!==CFG.standin)held.delete(c)})};
@@ -302,9 +302,9 @@ function openSetup(on){const s=$('#setup');s.hidden=!on;$('#bSetup').classList.t
 $('#bSetup').addEventListener('click',()=>openSetup($('#setup').hidden));
 $('#bLock').addEventListener('click',async()=>{const b=$('#bLock');
   if(document.fullscreenElement){try{navigator.keyboard&&navigator.keyboard.unlock()}catch(e){}document.exitFullscreen().catch(()=>{});return}
-  try{await document.documentElement.requestFullscreen();if(navigator.keyboard&&navigator.keyboard.lock){await navigator.keyboard.lock();KEYLOCK=true;renderCoach();osd('Keys locked · hold Esc to exit')}else osd('Fullscreen. This browser cannot lock keys; use Chrome, Edge or Brave.');renderScreen()}
+  try{await document.documentElement.requestFullscreen();if(navigator.keyboard&&navigator.keyboard.lock){await navigator.keyboard.lock();host.keylock=true;renderCoach();osd('Keys locked · hold Esc to exit')}else osd('Fullscreen. This browser cannot lock keys; use Chrome, Edge or Brave.');renderScreen()}
   catch(e){osd('Fullscreen blocked here. Open the page in its own browser tab.')}});
-document.addEventListener('fullscreenchange',()=>{const on=!!document.fullscreenElement;if(!on)KEYLOCK=false;$('#bLock').textContent=on?'Unlock keys':'Lock keys';$('#bLock').classList.toggle('on',on);setTimeout(()=>{measure();renderScreen()},60)});
+document.addEventListener('fullscreenchange',()=>{const on=!!document.fullscreenElement;if(!on)host.keylock=false;$('#bLock').textContent=on?'Unlock keys':'Lock keys';$('#bLock').classList.toggle('on',on);setTimeout(()=>{measure();renderScreen()},60)});
 
 const PLAT=(()=>{const p=(navigator.userAgentData&&navigator.userAgentData.platform)||navigator.platform||'';return /mac|iphone|ipad/i.test(p)?'mac':/win/i.test(p)?'win':'linux'})();
 const STANDINS=PLAT==='mac'?[[null,'None (real ⌘)'],['AltRight','Right Option'],['ControlRight','Right Ctrl'],['capture','Press a key…']]
@@ -312,23 +312,23 @@ const STANDINS=PLAT==='mac'?[[null,'None (real ⌘)'],['AltRight','Right Option'
 const PLAT_NOTE={mac:'On a Mac, ⌘ is Super, but ⌘W closes this tab, ⌘Q quits the browser and ⌘Space opens Spotlight. Use Right Option as a stand-in.',
   win:'On Windows, Win + L locks your PC and Windows keeps Win + Tab, Win + D and friends. Use Caps Lock or Right Ctrl as a stand-in.',
   linux:'On Omarchy, Hyprland acts on Super combos for real. Use Lock keys, or a stand-in like Caps Lock.'}[PLAT];
-let KEYLOCK=false;
-function hostWarn(){if(CFG.standin||KEYLOCK||PLAT==='linux'||CFG.input==='taps')return'';
+// keylock: navigator.keyboard.lock() is on. capturing: Key setup waits for a stand-in key.
+const host={keylock:false,capturing:false};
+function hostWarn(){if(CFG.standin||host.keylock||PLAT==='linux'||CFG.input==='taps')return'';
   return `<p class="fb tip">${PLAT==='mac'?'Using real ⌘: ⌘W and ⌘Q can close the browser.':'Using the real Win key: Win + L will lock your PC.'} <button class="btn" data-setup>Pick a stand-in</button></p>`}
-let capturing=false;
-function renderSetup(){$('#standinSeg').innerHTML=STANDINS.map(([c,l])=>`<button class="btn" data-si="${c}" aria-pressed="${capturing?c==='capture':(CFG.standin===c||(!STANDINS.some(s=>s[0]===CFG.standin)&&c==='capture'&&CFG.standin))}">${c==='capture'&&CFG.standin&&!STANDINS.slice(0,4).some(s=>s[0]===CFG.standin)?'Custom: '+esc(CFG.standin):l}</button>`).join('');
+function renderSetup(){$('#standinSeg').innerHTML=STANDINS.map(([c,l])=>`<button class="btn" data-si="${c}" aria-pressed="${host.capturing?c==='capture':(CFG.standin===c||(!STANDINS.some(s=>s[0]===CFG.standin)&&c==='capture'&&CFG.standin))}">${c==='capture'&&CFG.standin&&!STANDINS.slice(0,4).some(s=>s[0]===CFG.standin)?'Custom: '+esc(CFG.standin):l}</button>`).join('');
   $('#platNote').textContent=PLAT_NOTE;
-  $('#standinNote').textContent=capturing?'Press the key you want to use as Super…':CFG.standin?`While you hold ${(STANDINS.find(x=>x[0]===CFG.standin)||[0,CFG.standin])[1]}, it counts as Super.${CFG.standin==='AltRight'&&PLAT!=='mac'?' On some layouts Right Alt is AltGr and also reports Ctrl.':''}`:'Using the real Super key.';
+  $('#standinNote').textContent=host.capturing?'Press the key you want to use as Super…':CFG.standin?`While you hold ${(STANDINS.find(x=>x[0]===CFG.standin)||[0,CFG.standin])[1]}, it counts as Super.${CFG.standin==='AltRight'&&PLAT!=='mac'?' On some layouts Right Alt is AltGr and also reports Ctrl.':''}`:'Using the real Super key.';
   document.querySelectorAll('#inputSeg .btn').forEach(b=>b.setAttribute('aria-pressed',b.dataset.input===CFG.input))}
 $('#standinSeg').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const v=b.dataset.si;
-  if(v==='capture'){capturing=true}else{capturing=false;CFG.standin=v==='null'?null:v;saveCfg()}held.clear();renderSetup();renderMods();renderCoach()});
+  if(v==='capture'){host.capturing=true}else{host.capturing=false;CFG.standin=v==='null'?null:v;saveCfg()}held.clear();renderSetup();renderMods();renderCoach()});
 $('#inputSeg').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;CFG.input=b.dataset.input;saveCfg();renderSetup();renderCoach()});
-let resetArm=false;
+let resetArm=false,firedWhileHeld=false,usedSuper=false;
 $('#bReset').addEventListener('click',()=>{const b=$('#bReset');if(!resetArm){resetArm=true;b.textContent='Click again to erase';setTimeout(()=>{resetArm=false;b.textContent='Reset progress'},3000);return}
   resetProgress();resetArm=false;b.textContent='Progress erased';renderCoach()});
 
 window.addEventListener('keydown',e=>{
-  if(capturing){e.preventDefault();capturing=false;CFG.standin=e.code||null;saveCfg();held.clear();renderSetup();renderCoach();return}
+  if(host.capturing){e.preventDefault();host.capturing=false;CFG.standin=e.code||null;saveCfg();held.clear();renderSetup();renderCoach();return}
   const inField=e.target&&e.target.closest&&e.target.closest('input,textarea');
   const code=e.code;
   if(MODCODE[code]||code===CFG.standin){held.add(code);renderMods();if(code===CFG.standin||MODCODE[code]==='super')e.preventDefault();return}
@@ -345,7 +345,6 @@ window.addEventListener('keydown',e=>{
 },true);
 window.addEventListener('keyup',e=>{held.delete(e.code);if(e.code===CFG.standin||(firedWhileHeld&&MODCODE[e.code]))e.preventDefault();prune(e);if(!mods().size)firedWhileHeld=false;renderMods()},true);
 window.addEventListener('blur',()=>{held.clear();renderMods()});
-let usedSuper=false;
 window.addEventListener('beforeunload',e=>{if(PLAT==='mac'&&!CFG.standin&&usedSuper){e.preventDefault();e.returnValue=''}});
 document.addEventListener('visibilitychange',()=>{held.clear();renderMods()});
 new ResizeObserver(()=>{measure();renderScreen()}).observe($('#screen'));
