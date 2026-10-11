@@ -7,6 +7,8 @@ import { floatRect, setAspect, tileRects } from './model/layout.js';
 import { ACTS, BIND, DECKS, runAction } from './actions/act.js';
 import { prep } from './actions/ensure.js';
 import { OV, ovNav, PANELS } from './actions/overlays.js';
+import { LESSONS } from './coach/lessons.js';
+import { askText, D, distractors, freeLog, L, pick } from './coach/state.js';
 import './actions/index.js';
 
 /* ---------- themes ---------- */
@@ -81,7 +83,6 @@ const castLog=[];
 function cast(combo,label,bad){castLog.unshift({combo,label,bad});castLog.length=Math.min(castLog.length,4);
   $('#cast').innerHTML=castLog.map(c=>`<span class="ev">${caps(c.combo)}<span class="lbl${c.bad?' bad':''}">${esc(c.label)}</span></span>`).join('');
   freeLog.unshift({combo,label,bad});freeLog.length=Math.min(freeLog.length,14);if(CFG.mode==='free')renderCoach()}
-const freeLog=[];
 const held=new Set();
 function mods(){const m=new Set();for(const c of held){if(c===CFG.standin){m.add('super');continue}const k=MODCODE[c];if(k)m.add(k)}return m}
 function renderMods(){const m=mods();document.querySelectorAll('#mods span').forEach(s=>s.classList.toggle('on',m.has(s.dataset.m)))}
@@ -102,15 +103,7 @@ function press(combo,src){
   runAction(a);cast(combo,a.label,false);after(combo,a);renderScreen();return true}
 
 /* ---------- coach engines ---------- */
-const D={item:null,t0:0,revealed:false,missed:false,cool:false,streak:0,right:0,tries:0,last:[],fb:'',fbc:'',tip:false,opts:null,timers:[],blitz:null,wrongOpt:null};
-const L={lesson:null,step:0,note:'',fb:'',opts:null,done:false};
 function clearTimers(){D.timers.forEach(clearTimeout);D.timers=[];clearInterval(D.tick)}
-const askText=a=>typeof a.ask==='function'?a.ask():a.ask;
-function poolActs(){const p=ACTS.filter(a=>a.drill&&a.ask&&CFG.decks.includes(a.deck));return p.length?p:ACTS.filter(a=>a.drill&&a.ask&&a.deck==='basics')}
-function pick(){let pool=poolActs().filter(a=>!D.last.includes(a.id));if(!pool.length)pool=poolActs();const ws=pool.map(a=>{const p=P(a.id);return Math.pow(6-p.l,2)+(p.n===0?6:0)});
-  let r=Math.random()*ws.reduce((a,b)=>a+b,0);for(let i=0;i<pool.length;i++){r-=ws[i];if(r<=0)return pool[i]}return pool[pool.length-1]}
-function distractors(keys,deck){const others=ACTS.filter(a=>a.keys[0]!==keys[0]&&!keys.includes(a.keys[0])&&a.keys[0].includes('super'));
-  const same=shuffle(others.filter(a=>a.deck===deck)),rest=shuffle(others);const out=[];for(const a of[...same,...rest]){if(out.length>=3)break;if(!out.includes(a.keys[0]))out.push(a.keys[0])}return out}
 function nextPrompt(){clearTimers();if(D.blitz&&D.blitz.done)return;const a=pick();D.last=[a.id,...D.last].slice(0,3);
   if(a.ensure)a.ensure();else prep();
   D.item=a;D.ask=askText(a);D.t0=performance.now();D.missed=false;D.cool=false;D.fb='';D.fbc='';D.wrongOpt=null;
@@ -147,66 +140,6 @@ function blitzTick(){const B=D.blitz;if(!B)return;const left=Math.max(0,B.end-pe
   if(left<=0){clearTimers();B.done=true;D.item=null;if(B.score>CFG.best){CFG.best=B.score;B.newBest=true;saveCfg()}renderCoach()}}
 
 /* ---------- lessons ---------- */
-const LESSONS=[
- {t:'Tiling basics',d:'Open, stack, swap, float and close windows',setup:[],steps:[
-  {say:'Open a terminal.',keys:['super+return'],note:'Every window opens tiled. No dragging, no overlapping.'},
-  {say:'Open the browser next to it.',keys:['super+shift+return'],note:'Hyprland split the screen for you. Focus jumps to the new window.'},
-  {say:'Stack the two windows on top of each other.',keys:['super+j']},
-  {say:'Put them back side by side.',keys:['super+j'],note:'Super + J flips whichever split the focused window sits in.'},
-  {say:'Swap the browser over to the left.',keys:['super+shift+left'],note:'Super + Shift + arrow swaps. Plain Super + arrow only moves focus.'},
-  {say:'Move focus to the terminal on the right.',keys:['super+right']},
-  {say:'Launch the activity monitor. It opens floating.',keys:['super+ctrl+t']},
-  {say:'Tile it into the layout.',keys:['super+t'],note:'Super + T toggles any window between tiled and floating.'},
-  {say:'Open the file manager for a four-way split.',keys:['super+shift+f'],note:'Each new window splits the focused one. That spiral is the dwindle layout.'},
-  {say:'Close the focused window.',keys:['super+w','super+q'],note:'Super + W and Super + Q both close. Pick whichever your hand finds first.'}]},
- {t:'Workspaces',d:'Spread work across 1 to 4, plus the scratchpad',setup:['terminal','browser'],steps:[
-  {say:'Send the browser to workspace 2. You follow it.',keys:['super+shift+2']},
-  {say:'Jump back to workspace 1.',keys:['super+1'],note:'Workspaces are just Super + number. Watch the bar at the top left.'},
-  {say:'Send the terminal to workspace 3 without following it.',keys:['super+alt+shift+3'],note:'Adding Alt keeps you where you are.'},
-  {say:'Hop to the next workspace.',keys:['super+tab']},
-  {say:'Jump back to the workspace you were just on.',keys:['super+ctrl+tab']},
-  {say:'Drop down the scratchpad.',keys:['super+s','super+backquote'],note:'The scratchpad slides over whatever workspace you are on, like a Quake console.'},
-  {say:'Open a terminal on it.',keys:['super+return']},
-  {say:'Hide the scratchpad again.',keys:['super+s','super+backquote'],note:'Your scratchpad terminal keeps running in the background. The S in the bar marks it.'}]},
- {t:'Big, small, floating',d:'Full screen, sticky windows and the scrolling layout',setup:['terminal','browser'],steps:[
-  {say:'Make the browser full screen.',keys:['super+f']},
-  {say:'Leave full screen.',keys:['super+f']},
-  {say:'Go full width, keeping the top bar.',keys:['super+alt+f']},
-  {say:'Back to normal.',keys:['super+alt+f']},
-  {say:'Pop the browser out as a sticky floating window.',keys:['super+o'],note:'Popped windows follow you across workspaces. Great for a video.'},
-  {say:'Go to workspace 2.',keys:['super+2'],note:'The popped window came along.'},
-  {say:'Come back to workspace 1.',keys:['super+1']},
-  {say:'Put the popped window back into the tiling.',keys:['super+o']},
-  {say:'Switch this workspace to the scrolling layout.',keys:['super+l'],note:'Windows now line up in a strip that runs past the screen edge.'},
-  {say:'Open another terminal.',keys:['super+return']},
-  {say:'Move focus left along the strip.',keys:['super+left'],note:'The strip scrolls to keep focus in view.'},
-  {say:'Back to dwindle.',keys:['super+l']}]},
- {t:'Groups',d:'Stack windows as tabs in one tile',setup:['terminal','browser'],steps:[
-  {say:'Turn the browser into a group.',keys:['super+g']},
-  {say:'Open a terminal. It joins the group as a tab.',keys:['super+return']},
-  {say:'Switch to the previous tab.',keys:['super+ctrl+left']},
-  {say:'Switch to the next tab.',keys:['super+ctrl+right']},
-  {say:'Cycle through the tabs.',keys:['super+alt+tab']},
-  {say:'Pull this window out of the group.',keys:['super+alt+g']},
-  {say:'Focus the group on the left.',keys:['super+left']},
-  {say:'Break the group apart.',keys:['super+g']}]},
- {t:'Menus & system',d:'The Omarchy menu, themes, clipboard, notifications',setup:['terminal'],steps:[
-  {say:'Open the Omarchy menu.',keys:['super+space'],note:'Almost everything lives in here. Arrow keys move, Return picks.'},
-  {say:'Close it.',keys:['escape']},
-  {say:'Show the keybindings cheat sheet.',keys:['super+k']},
-  {say:'Close it.',keys:['escape']},
-  {say:'Open the system menu.',keys:['super+escape']},
-  {say:'Close it.',keys:['escape']},
-  {say:'Open the theme picker.',keys:['super+ctrl+shift+space']},
-  {say:'Move down one theme.',keys:['down']},
-  {say:'Apply it.',keys:['return'],note:'That really changed this page. Omarchy restyles the whole system the same way.'},
-  {say:'Copy. It works in terminals too.',keys:['super+c'],note:'Omarchy unifies copy and paste so the terminal needs no Shift.'},
-  {say:'Open the clipboard history.',keys:['super+ctrl+v']},
-  {say:'Close it.',keys:['escape']},
-  {say:'Dismiss the latest notification.',keys:['super+comma'],pre:()=>{const s=S.silent;S.silent=false;notify('Calendar','Standup in 5 minutes');S.silent=s}},
-  {say:'Lock the computer.',keys:['super+ctrl+l']},
-  {say:'Unlock it.',keys:['escape','return']}]},
-];
 function startLesson(i){clearTimers();L.lesson=i;L.step=0;L.note='';L.fb='';L.done=false;D.tip=false;fresh();LESSONS[i].setup.forEach(a=>openApp(a));
   const st=LESSONS[i].steps[0];if(st.pre)st.pre();renderScreen();renderCoach()}
 
