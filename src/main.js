@@ -1,174 +1,18 @@
-import { $, esc, rnd, shuffle } from './lib/util.js';
+import { $, esc, shuffle } from './lib/util.js';
 import { canon, caps, capsAll, keyName, MODCODE, MODS, plain } from './lib/keys.js';
 import { CFG, P, resetProgress, saveCfg, saveProg, setTheme, THEMES } from './config.js';
 import { APPS } from './model/apps.js';
-import { closeWin, curSlot, curWs, cycle, detach, effects, focusId, fresh, gotoWs, gstep, moveTo, neighbor, notify, openApp, osd, resize, S, slotOf, toScratch, W } from './model/desktop.js';
-import { floatRect, setAspect, tiled, tileRects } from './model/layout.js';
+import { effects, focusId, fresh, notify, openApp, osd, S, W } from './model/desktop.js';
+import { floatRect, setAspect, tileRects } from './model/layout.js';
+import { ACTS, BIND, DECKS, runAction } from './actions/act.js';
+import { prep } from './actions/ensure.js';
+import { OV, ovNav, PANELS } from './actions/overlays.js';
+import './actions/index.js';
 
 /* ---------- themes ---------- */
 function applyTheme(id){id=setTheme(id);const r=document.documentElement;
   if(id==='auto')r.removeAttribute('data-om');else r.setAttribute('data-om',id);
   $('#bTheme').textContent='Theme: '+THEMES.find(t=>t[0]===id)[1]}
-
-/* ---------- desktop state ---------- */
-
-/* geometry (normalized to the work area) */
-
-/* ---------- actions ---------- */
-const ACTS=[],BIND={};
-function act(id,deck,keys,label,run,o={}){const a=Object.assign({id,deck,keys:keys.map(canon),label,run,drill:true},o);ACTS.push(a);a.keys.forEach(k=>BIND[k]=a);return a}
-const DECKS={basics:'Essentials',tiling:'Tiling',workspaces:'Workspaces',groups:'Groups',apps:'Apps',system:'Clipboard, style & system'};
-const OS_NOTE='Your OS may grab this one. Use Lock keys.';
-const openOv=(k,idx=0)=>()=>{S.overlay=k;S.ovIdx=idx};
-const toggleOv=k=>()=>{if(S.overlay===k){S.overlay=null}else{S.overlay=k;S.ovIdx=0}};
-
-// essentials
-act('terminal','basics',['super+return'],'Terminal',()=>openApp('terminal'),{ask:'Open a terminal'});
-act('browser','basics',['super+shift+return'],'Browser',()=>openApp('browser'),{ask:'Open the browser'});
-act('close','basics',['super+w','super+q'],'Close window',()=>closeWin(focusId()),{ask:'Close the focused window',ensure:()=>ensureTiled(2)});
-act('menu','basics',['super+space'],'Omarchy menu',toggleOv('menu'),{ask:'Open the Omarchy menu (apps and everything else)'});
-act('appsmenu','basics',['super+alt+space'],'Apps menu',toggleOv('apps'),{ask:'Open the apps launcher'});
-act('sysmenu','basics',['super+escape'],'System menu',toggleOv('system'),{ask:'Open the system menu (suspend, restart…)'});
-act('keys','basics',['super+k'],'Keybindings',toggleOv('keys'),{ask:'Show the keybindings cheat sheet'});
-act('lock','basics',['super+ctrl+l'],'Lock screen',openOv('lock'),{ask:'Lock the computer'});
-act('files','basics',['super+shift+f'],'File manager',()=>openApp('files'),{ask:'Open the file manager'});
-act('closeall','basics',['ctrl+alt+delete'],'Close all windows',()=>{[...Object.keys(S.wins)].forEach(id=>closeWin(+id))},{ask:'Close every window at once',os:OS_NOTE,drill:false});
-
-// tiling
-const DIRS={left:'left',right:'right',up:'up',down:'down'};
-for(const d of Object.keys(DIRS)){
-  act('focus-'+d,'tiling',['super+'+d],'Focus '+d,()=>{const n=neighbor(d);if(n!=null)curWs().focus=n;else osd('No window '+(d==='up'||d==='down'?d:'to the '+d))},{ask:'Move focus to the window '+(d==='up'?'above':d==='down'?'below':'on the '+d),ensure:()=>ensureDir(d)});
-  act('swap-'+d,'tiling',['super+shift+'+d],'Swap '+d,()=>{const ws=curWs(),f=focusId(),n=neighbor(d);if(n==null||ws.floats.includes(f)){osd('Nothing to swap with');return}
-    const a=slotOf(ws,f),b=slotOf(ws,n);if(a<0||b<0)return;[ws.slots[a],ws.slots[b]]=[ws.slots[b],ws.slots[a]]},{ask:'Swap the focused window with the one '+(d==='up'?'above':d==='down'?'below':'to the '+d),ensure:()=>ensureDir(d)});
-}
-act('split','tiling',['super+j'],'Toggle split',()=>{const ws=curWs();if(ws.layout!=='dwindle'){osd('Split toggle works in dwindle');return}const f=focusId(),i=slotOf(ws,f),n=ws.slots.length;if(i<0||n<2)return;const s=Math.min(i,n-2);ws.flips[s]=!ws.flips[s]},{ask:'Flip the split between side by side and stacked',ensure:()=>ensureTiled(2)});
-act('float','tiling',['super+t'],'Tile / float',()=>{const ws=curWs(),f=focusId();if(f==null)return;if(S.pinned.includes(f)){osd('Pinned window');return}
-  if(ws.floats.includes(f)){ws.floats.splice(ws.floats.indexOf(f),1);ws.slots.push({wins:[f],active:0,grouped:false})}else{detach(f);ws.floats.push(f)}ws.focus=f},
-  {ask:()=>curWs().floats.includes(focusId())?'Tile the floating window':'Make the focused window float',ensure:()=>ensureTiled(2)});
-act('full','tiling',['super+f'],'Full screen',()=>{const f=focusId();if(f==null)return;const w=W(f);w.full=w.full===1?0:1},{ask:()=>W(focusId())?.full===1?'Leave full screen':'Make the window full screen',ensure:()=>ensureTiled(2,true)});
-act('fullw','tiling',['super+alt+f'],'Full width',()=>{const f=focusId();if(f==null)return;const w=W(f);w.full=w.full===2?0:2},{ask:()=>W(focusId())?.full===2?'Return from full width':'Go full width (keep the top bar)',ensure:()=>ensureTiled(2,true)});
-act('fakefull','tiling',['super+ctrl+f'],'Full screen inside window',()=>{const f=focusId();if(f==null)return;W(f).fake=!W(f).fake},{ask:'Go full screen inside the window (great for YouTube)',ensure:()=>ensureTiled(1)});
-act('pop','tiling',['super+o'],'Pop out (sticky + floating)',()=>{const f=focusId();if(f==null)return;const ws=curWs();
-  if(S.pinned.includes(f)){S.pinned.splice(S.pinned.indexOf(f),1);ws.slots.push({wins:[f],active:0,grouped:false});ws.focus=f}else{detach(f);S.pinned.push(f);ws.focus=f}},
-  {ask:()=>S.pinned.includes(focusId())?'Put the popped window back into the tiling':'Pop the window out so it floats and follows you everywhere',ensure:()=>ensureTiled(2)});
-act('layout','tiling',['super+l'],'Dwindle ↔ scrolling',()=>{const ws=curWs();ws.layout=ws.layout==='dwindle'?'scrolling':'dwindle';osd('Layout: '+ws.layout)},
-  {ask:()=>curWs().layout==='dwindle'?'Switch this workspace to the scrolling layout':'Switch this workspace back to dwindle',ensure:()=>ensureTiled(3,true,'any')});
-act('pseudo','tiling',['super+p'],'Pseudo tile',()=>{const f=focusId();if(f!=null)W(f).pseudo=!W(f).pseudo},{drill:false});
-act('grow','tiling',['super+minus'],'Expand window left',()=>resize('h',-1),{ask:'Expand the window to the left',ensure:()=>ensureDir('left')});
-act('shrink','tiling',['super+equal'],'Shrink window left',()=>resize('h',1),{ask:'Shrink the window from the left',ensure:()=>ensureDir('left')});
-act('shrinkv','tiling',['super+shift+minus'],'Shrink window up',()=>resize('v',1),{drill:false});
-act('growv','tiling',['super+shift+equal'],'Expand window down',()=>resize('v',-1),{drill:false});
-act('alttab','tiling',['alt+tab'],'Next window',()=>cycle(1),{ask:'Cycle to the next window on this workspace',os:OS_NOTE,ensure:()=>ensureTiled(2)});
-act('alttabb','tiling',['alt+shift+tab'],'Previous window',()=>cycle(-1),{drill:false,os:OS_NOTE});
-
-// workspaces
-for(const n of [1,2,3,4]){
-  act('ws'+n,'workspaces',['super+'+n],'Workspace '+n,()=>gotoWs(n),{ask:'Jump to workspace '+n,ensure:()=>{prep();if(S.cur===n)gotoWs(n===1?2:1)}});
-  act('mv'+n,'workspaces',['super+shift+'+n],'Move to workspace '+n,()=>moveTo(n,true),{ask:'Move the focused window to workspace '+n+' (and follow it)',ensure:()=>{prep();if(S.cur===n)gotoWs(n===1?2:1);ensureTiled(1)}});
-  act('mvs'+n,'workspaces',['super+alt+shift+'+n],'Send to workspace '+n,()=>{moveTo(n,false);osd('Sent to workspace '+n)},{ask:'Send the focused window to workspace '+n+' without following',ensure:()=>{prep();if(S.cur===n)gotoWs(n===1?2:1);ensureTiled(2)},drill:n<=3});
-}
-act('wsnext','workspaces',['super+tab'],'Next workspace',()=>gotoWs(S.cur%4+1),{ask:'Jump to the next workspace',os:OS_NOTE});
-act('wsprev','workspaces',['super+shift+tab'],'Previous workspace',()=>gotoWs((S.cur+2)%4+1),{ask:'Jump to the previous workspace',os:OS_NOTE});
-act('wsformer','workspaces',['super+ctrl+tab'],'Former workspace',()=>gotoWs(S.prev),{ask:'Jump back to the workspace you were on before',ensure:()=>{prep();if(S.prev===S.cur)S.prev=S.cur===1?3:1}});
-act('scratch','workspaces',['super+s','super+backquote'],'Scratchpad',()=>{S.scratch=!S.scratch;if(S.scratch&&!S.ws.S.slots.length&&!S.ws.S.floats.length)osd('Scratchpad is empty')},
-  {ask:()=>S.scratch?'Hide the scratchpad':'Drop down the scratchpad',ensure:()=>{closeOverlay();if(!S.ws.S.slots.length){const sv=S.scratch;S.scratch=true;openApp('terminal');S.scratch=sv}}});
-act('toscratch','workspaces',['super+alt+s','super+shift+backquote'],'Move to scratchpad',()=>{if(!toScratch())osd('Already on the scratchpad')},{ask:'Stash the focused window on the scratchpad',ensure:()=>{prep();ensureTiled(2)}});
-
-// groups
-act('group','groups',['super+g'],'Toggle group',()=>{const ws=curWs(),i=slotOf(ws,focusId());if(i<0){osd('Tile the window first');return}const sl=ws.slots[i];
-  if(sl.grouped&&sl.wins.length>1){ws.slots.splice(i,1,...sl.wins.map(id=>({wins:[id],active:0,grouped:false})))}else sl.grouped=!sl.grouped},
-  {ask:()=>curSlot()?.grouped?'Break the group apart':'Turn the focused window into a group (tabs)',ensure:()=>ensureTiled(2)});
-act('gnext','groups',['super+ctrl+right'],'Next tab in group',()=>gstep(1),{ask:'Switch to the next tab in the group',ensure:()=>ensureGroup()});
-act('gprev','groups',['super+ctrl+left'],'Previous tab in group',()=>gstep(-1),{ask:'Switch to the previous tab in the group',ensure:()=>ensureGroup()});
-act('gcycle','groups',['super+alt+tab'],'Cycle group',()=>gstep(1),{ask:'Cycle through the windows in the group',ensure:()=>ensureGroup()});
-act('gcycleb','groups',['super+alt+shift+tab'],'Cycle group backward',()=>gstep(-1),{drill:false});
-act('gout','groups',['super+alt+g'],'Move out of group',()=>{const ws=curWs(),f=focusId(),i=slotOf(ws,f);if(i<0)return;const sl=ws.slots[i];
-  if(!sl.grouped)return osd('Not in a group');if(sl.wins.length===1){sl.grouped=false;return}sl.wins.splice(sl.wins.indexOf(f),1);sl.active=Math.min(sl.active,sl.wins.length-1);ws.slots.splice(i+1,0,{wins:[f],active:0,grouped:false});ws.focus=f},
-  {ask:'Pull the focused window out of its group',ensure:()=>ensureGroup()});
-for(const n of [1,2,3,4,5])act('gjump'+n,'groups',['super+alt+'+n],'Group tab '+n,()=>{const sl=curSlot();if(sl&&sl.grouped&&sl.wins[n-1]!=null){sl.active=n-1;curWs().focus=sl.wins[n-1]}},{drill:n===2,ask:'Jump straight to tab '+n+' of the group',ensure:()=>ensureGroup(n)});
-for(const d of ['left','right','up','down'])act('ginto-'+d,'groups',['super+alt+'+d],'Move into group '+d,()=>{const ws=curWs(),f=focusId(),n=neighbor(d);if(n==null)return;const b=slotOf(ws,n);
-  if(!ws.slots[b].grouped){osd('That window is not a group');return}detach(f);const t=ws.slots[slotOf(ws,n)];t.wins.push(f);t.active=t.wins.length-1;ws.focus=f},{drill:false});
-
-// apps
-const AK=[['tmux','super+alt+return','Tmux terminal'],['herdr','super+ctrl+return','Herdr (agent manager)'],['private','super+alt+shift+b','Private browser'],
- ['nvim','super+shift+n','Editor (Neovim)'],['music','super+shift+m','Music (Spotify)'],['btop','super+ctrl+t','Activity (btop)'],['passwords','super+shift+slash','Password manager'],
- ['obsidian','super+shift+o','Obsidian'],['email','super+shift+e','Email (HEY)'],['calendar','super+shift+c','Calendar (HEY)'],['chatgpt','super+shift+a','AI (ChatGPT)'],
- ['grok','super+alt+shift+a','AI (Grok)'],['signal','super+shift+g','Messenger (Signal)'],['whatsapp','super+alt+shift+g','WhatsApp'],['youtube','super+shift+y','YouTube'],
- ['docker','super+shift+d','Docker (LazyDocker)'],['write','super+shift+w','Writing (Omawrite)'],['maps','super+shift+s','Google Maps'],['photos','super+shift+p','Google Photos'],
- ['x','super+shift+x','X'],['calc','super+ctrl+q','Calculator']];
-const AK_DRILL=['tmux','nvim','music','btop','passwords','obsidian','email','calendar','docker','herdr','chatgpt'];
-for(const[app,k,l]of AK)act('app-'+app,'apps',[k],l,()=>openApp(app),{ask:'Launch '+l,drill:AK_DRILL.includes(app),ensure:()=>{prep();trim(3)}});
-
-// system, clipboard, style
-act('copy','system',['super+c'],'Copy',()=>{S.clip.unshift('copied text '+(S.clip.length+1));osd('Copied')},{ask:'Copy (works in the terminal too)'});
-act('paste','system',['super+v'],'Paste',()=>osd('Pasted'),{ask:'Paste'});
-act('cut','system',['super+x'],'Cut',()=>osd('Cut'),{ask:'Cut the selection'});
-act('clipmgr','system',['super+ctrl+v'],'Clipboard manager',toggleOv('clip'),{ask:'Open the clipboard history'});
-act('dismiss','system',['super+comma'],'Dismiss notification',()=>{S.notifs.shift()},{ask:'Dismiss the latest notification',ensure:()=>{if(!S.notifs.length){const s=S.silent;S.silent=false;notify('Battery','82% and charging');S.silent=s}}});
-act('dismissall','system',['super+shift+comma'],'Dismiss all notifications',()=>{S.notifs=[]},{ask:'Dismiss all notifications',ensure:()=>{const s=S.silent;S.silent=false;while(S.notifs.length<2)notify(rnd(['Signal','Calendar','Update']),rnd(['New message from Ana','Standup in 5 minutes','Omarchy 4.0.5 is ready']));S.silent=s}});
-act('silence','system',['super+ctrl+comma'],'Silence notifications',()=>{S.silent=!S.silent;osd(S.silent?'Notifications silenced':'Notifications on')},{ask:()=>S.silent?'Turn notifications back on':'Silence notifications'});
-act('invoke','system',['super+alt+comma'],'Open latest notification',()=>{if(S.notifs.shift())osd('Opened')},{drill:false});
-act('nhist','system',['super+alt+shift+comma'],'Notification history',toggleOv('history'),{drill:false});
-act('theme','system',['super+ctrl+shift+space'],'Pick a theme',()=>{S.overlay='theme';S.ovIdx=Math.max(0,THEMES.findIndex(t=>t[0]===CFG.theme)-1)},{ask:'Open the theme picker'});
-act('bg','system',['super+ctrl+space'],'Next background',()=>{CFG.wp=(CFG.wp+1)%3;saveCfg();osd('Background '+(CFG.wp+1)+' of 3')},{ask:'Switch the theme background'});
-act('transp','system',['super+backspace'],'Toggle transparency',()=>{const f=focusId();if(f!=null){W(f).transp=!W(f).transp;osd(W(f).transp?'Transparent':'Opaque')}},{ask:'Toggle transparency on the window',ensure:()=>ensureTiled(1)});
-act('topbar','system',['super+shift+space'],'Toggle top bar',()=>{S.bar=!S.bar},{ask:()=>S.bar?'Hide the top bar':'Bring the top bar back'});
-act('gaps','system',['super+shift+backspace'],'Toggle gaps',()=>{S.gaps=!S.gaps;osd(S.gaps?'Gaps on':'Gaps off')},{ask:()=>S.gaps?'Turn window gaps off':'Turn window gaps back on',ensure:()=>ensureTiled(2)});
-act('dfull','system',['super+ctrl+alt+f'],'Full screen desktop',()=>{S.dfull=!S.dfull},{drill:false});
-act('night','system',['super+ctrl+n'],'Nightlight',()=>{S.night=!S.night;osd(S.night?'Nightlight on':'Nightlight off')},{ask:()=>S.night?'Turn nightlight off':'Turn on nightlight'});
-act('idle','system',['super+ctrl+i'],'Toggle lock on idle',()=>osd('Idle lock toggled'),{drill:false});
-for(const[k,n]of[['a','audio'],['b','bluetooth'],['w','wifi'],['d','display'],['p','power']])
-  act('panel-'+n,'system',['super+ctrl+'+k],n[0].toUpperCase()+n.slice(1)+' panel',toggleOv('panel-'+n),{ask:'Open the '+n+' panel',drill:['audio','wifi','bluetooth'].includes(n)});
-act('emoji','system',['super+ctrl+e'],'Emoji picker',toggleOv('emoji'),{ask:'Open the emoji picker'});
-act('capture','system',['super+ctrl+c'],'Capture menu',toggleOv('capture'),{ask:'Open capture controls (screenshot, recording)'});
-act('hardware','system',['super+ctrl+h'],'Hardware menu',toggleOv('hardware'),{drill:false});
-act('reminder','system',['super+ctrl+r'],'Set a reminder',toggleOv('reminder'),{drill:false});
-act('zoom','system',['super+ctrl+z'],'Zoom in',()=>{S.zoom=Math.min(2.2,S.zoom+.3)},{drill:false});
-act('zoomout','system',['super+ctrl+alt+z'],'Zoom out',()=>{S.zoom=1},{drill:false});
-
-// Run an action the way a key press does: anything but another menu closes the open one.
-const MENUS=['menu','appsmenu','sysmenu','keys','clipmgr','theme','emoji','capture','hardware','reminder','nhist'];
-function runAction(a){if(!MENUS.includes(a.id)&&!a.id.startsWith('panel-'))S.overlay=null;a.run()}
-
-/* ---------- drill preconditions ---------- */
-function closeOverlay(){S.overlay=null}
-function trim(max){const ws=S.ws[S.cur];while(ws.slots.length>max){const sl=ws.slots[0];[...sl.wins].forEach(id=>closeWin(id))}while(ws.floats.length>1)closeWin(ws.floats[0])}
-function prep(){closeOverlay();S.scratch=false;S.zoom=1;Object.values(S.wins).forEach(w=>{w.full=0;w.fake=false})}
-function ensureTiled(n,allowFloat,layout){prep();const ws=S.ws[S.cur];if(layout!=='any')ws.layout='dwindle';trim(5);
-  let guard=0;while(ws.slots.length<n&&guard++<8)openApp(rnd(['terminal','browser','files','nvim','obsidian']),{noGroup:true,tile:true});
-  const f=focusId();if((f==null||ws.floats.includes(f)||S.pinned.includes(f))&&ws.slots.length)ws.focus=tiled(ws)[ws.slots.length-1]}
-function ensureDir(d){ensureTiled(2);for(let t=0;t<5;t++){const ws=S.ws[S.cur];for(const id of shuffle(tiled(ws))){ws.focus=id;if(neighbor(d)!=null)return}openApp('terminal',{noGroup:true})}}
-function ensureGroup(min=2){ensureTiled(1);const ws=S.ws[S.cur];let sl=curSlot();if(!sl){ws.focus=tiled(ws)[0];sl=curSlot()}sl.grouped=true;
-  let g=0;while(sl.wins.length<Math.max(2,min)&&g++<6){openApp(rnd(['terminal','browser','nvim']))}sl=curSlot();
-  if(sl&&min>=2){sl.active=0;ws.focus=sl.wins[0]}}
-
-/* ---------- overlays ---------- */
-const OV={
-  menu:{t:'Omarchy',items:()=>['Apps','Learn','Trigger','Share','Style','Setup','Install','Remove','Update','About','System'],input:'Search…'},
-  apps:{t:'Apps',items:()=>['Terminal','Chromium','Files','Neovim','Obsidian','Spotify','Signal','LibreOffice','Kdenlive','OBS Studio'],input:'Search apps…'},
-  system:{t:'System',items:()=>['Lock','Screensaver','Suspend','Restart','Shutdown']},
-  keys:{t:'Keybindings',items:()=>['terminal','browser','close','menu','focus-left','swap-right','split','float','full','ws2','mv2','scratch','group','theme'].map(id=>ACTS.find(a=>a.id===id)).map(a=>[a.label,a.keys[0]])},
-  clip:{t:'Clipboard',items:()=>S.clip.slice(0,6)},
-  history:{t:'Notifications',items:()=>S.hist.length?S.hist.slice(0,6).map(n=>n.title+' · '+n.body):['Nothing yet']},
-  theme:{t:'Theme',items:()=>THEMES.slice(1).map(t=>t[1])},
-  capture:{t:'Capture',items:()=>['Screenshot','Screenrecord','Color picker','Text extraction']},
-  hardware:{t:'Hardware',items:()=>['Audio','Bluetooth','Wifi','Display','Power','Keyboard']},
-  reminder:{t:'Set a reminder',items:()=>['in 25m stretch','at 17:00 ship it','tomorrow 9:00 standup'],input:'in 25m stretch'},
-  emoji:{t:'Emoji',grid:['😄','😂','😍','✌️','❤️','👍','👎','🤞','🤘','😘','🙄','😉','🙏','🤤','💰','🎉','💯','🥂','👌','👋','💪']},
-};
-const PANELS={audio:[['Output','Speakers'],['Volume','▮▮▮▮▮▮▯▯▯▯ 60%'],['Input','Mic']],bluetooth:[['Bluetooth','On'],['Keychron K3','connected'],['AirPods','paired']],
-  wifi:[['Wifi','home-5g'],['Signal','▂▄▆█'],['Other','cafe-guest']],display:[['Display','eDP-1'],['Scale','1.6x'],['Nightlight',()=>S.night?'on':'off']],power:[['Battery','82%'],['Profile','balanced'],['Lid','suspend']]};
-function ovItems(){const o=OV[S.overlay];return o&&o.items?o.items():[]}
-function ovNav(c){
-  if(S.overlay==='lock'){if(c==='escape'||c==='return'){S.overlay=null;osd('Unlocked')}return}
-  if(c==='escape'){S.overlay=null;return}
-  const it=ovItems();if(!it.length){if(c==='return')S.overlay=null;return}
-  if(c==='down')S.ovIdx=(S.ovIdx+1)%it.length;
-  if(c==='up')S.ovIdx=(S.ovIdx-1+it.length)%it.length;
-  if(c==='return'){const pick=it[S.ovIdx];
-    if(S.overlay==='theme'){effects.theme(THEMES[S.ovIdx+1][0]);osd('Theme: '+THEMES[S.ovIdx+1][1])}
-    else osd((Array.isArray(pick)?pick[0]:pick)+(S.overlay==='clip'?' pasted':''));
-    S.overlay=null}}
 
 /* ---------- rendering the screen ---------- */
 let DIM={W:960,H:600,bar:22};
