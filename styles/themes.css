@@ -1,0 +1,33 @@
+/* Layout: a live tiling "screen" on the left, the coach rail on the right; stacks to one column on phones.
+   Dark-first (Omarchy ships dark), Tokyo Night by default, every Omarchy theme swaps the tokens. */
+:root{
+  --bg:#1a1b26; --sunk:#16161e; --panel:#1f2335; --raise:#292e42; --line:#3b4261;
+  --fg:#c0caf5; --dim:#7c84ad; --accent:#7aa2f7; --accent2:#bb9af7;
+  --ok:#9ece6a; --bad:#f7768e; --warn:#e0af68; --cyan:#7dcfff;
+  --mono:"JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --gap:5px; --barh:22px;
+  color-scheme:dark;
+}
+@media (prefers-color-scheme: light){
+  :root:not([data-theme="dark"]){
+    --bg:#fffcf0; --sunk:#f2f0e5; --panel:#f7f5ea; --raise:#e6e4d9; --line:#cecdc3;
+    --fg:#100f0f; --dim:#6f6e69; --accent:#205ea6; --accent2:#5e409d;
+    --ok:#66800b; --bad:#af3029; --warn:#ad8301; --cyan:#24837b; color-scheme:light;
+  }
+}
+:root[data-theme="light"]{
+  --bg:#fffcf0; --sunk:#f2f0e5; --panel:#f7f5ea; --raise:#e6e4d9; --line:#cecdc3;
+  --fg:#100f0f; --dim:#6f6e69; --accent:#205ea6; --accent2:#5e409d;
+  --ok:#66800b; --bad:#af3029; --warn:#ad8301; --cyan:#24837b; color-scheme:light;
+}
+/* Explicit theme picks (from the header or Super + Ctrl + Shift + Space) win over the host theme. */
+:root[data-om="tokyo-night"]{--bg:#1a1b26;--sunk:#16161e;--panel:#1f2335;--raise:#292e42;--line:#3b4261;--fg:#c0caf5;--dim:#7c84ad;--accent:#7aa2f7;--accent2:#bb9af7;--ok:#9ece6a;--bad:#f7768e;--warn:#e0af68;--cyan:#7dcfff;color-scheme:dark}
+:root[data-om="catppuccin"]{--bg:#1e1e2e;--sunk:#181825;--panel:#24243a;--raise:#313244;--line:#45475a;--fg:#cdd6f4;--dim:#8a8fad;--accent:#89b4fa;--accent2:#cba6f7;--ok:#a6e3a1;--bad:#f38ba8;--warn:#f9e2af;--cyan:#94e2d5;color-scheme:dark}
+:root[data-om="gruvbox"]{--bg:#282828;--sunk:#1d2021;--panel:#2e2c2a;--raise:#3c3836;--line:#504945;--fg:#ebdbb2;--dim:#a89984;--accent:#d79921;--accent2:#d3869b;--ok:#b8bb26;--bad:#fb4934;--warn:#fabd2f;--cyan:#8ec07c;color-scheme:dark}
+:root[data-om="everforest"]{--bg:#2d353b;--sunk:#232a2e;--panel:#323c41;--raise:#3d484d;--line:#4f585e;--fg:#d3c6aa;--dim:#9da9a0;--accent:#a7c080;--accent2:#d699b6;--ok:#a7c080;--bad:#e67e80;--warn:#dbbc7f;--cyan:#83c092;color-scheme:dark}
+:root[data-om="nord"]{--bg:#2e3440;--sunk:#272c36;--panel:#333a47;--raise:#3b4252;--line:#4c566a;--fg:#eceff4;--dim:#9aa4b8;--accent:#88c0d0;--accent2:#b48ead;--ok:#a3be8c;--bad:#bf616a;--warn:#ebcb8b;--cyan:#8fbcbb;color-scheme:dark}
+:root[data-om="rose-pine"]{--bg:#191724;--sunk:#13111c;--panel:#1f1d2e;--raise:#26233a;--line:#403d52;--fg:#e0def4;--dim:#908caa;--accent:#ebbcba;--accent2:#c4a7e7;--ok:#9ccfd8;--bad:#eb6f92;--warn:#f6c177;--cyan:#9ccfd8;color-scheme:dark}
+:root[data-om="kanagawa"]{--bg:#1f1f28;--sunk:#16161d;--panel:#24242f;--raise:#2a2a37;--line:#3c3c50;--fg:#dcd7ba;--dim:#9a9886;--accent:#7e9cd8;--accent2:#957fb8;--ok:#98bb6c;--bad:#e46876;--warn:#e6c384;--cyan:#7fb4ca;color-scheme:dark}
+:root[data-om="matte-black"]{--bg:#121212;--sunk:#0b0b0b;--panel:#171717;--raise:#1f1f1f;--line:#333333;--fg:#d4d4d4;--dim:#8a8a8a;--accent:#e68e0d;--accent2:#c9a26b;--ok:#9fb06a;--bad:#d35f5f;--warn:#f0b54a;--cyan:#9fb4b4;color-scheme:dark}
+:root[data-om="catppuccin-latte"]{--bg:#eff1f5;--sunk:#e6e9ef;--panel:#e9ecf2;--raise:#dce0e8;--line:#bcc0cc;--fg:#4c4f69;--dim:#7c7f93;--accent:#1e66f5;--accent2:#8839ef;--ok:#40a02b;--bad:#d20f39;--warn:#df8e1d;--cyan:#179299;color-scheme:light}
+:root[data-om="flexoki-light"]{--bg:#fffcf0;--sunk:#f2f0e5;--panel:#f7f5ea;--raise:#e6e4d9;--line:#cecdc3;--fg:#100f0f;--dim:#6f6e69;--accent:#205ea6;--accent2:#5e409d;--ok:#66800b;--bad:#af3029;--warn:#ad8301;--cyan:#24837b;color-scheme:light}

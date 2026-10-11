@@ -1,6 +1,6 @@
 # Omadojo
 
-Muscle memory for [Omarchy](https://omarchy.org). A single-page trainer with a simulated Hyprland desktop where every shortcut really tiles, swaps, floats, groups and moves windows across workspaces.
+Muscle memory for [Omarchy](https://omarchy.org). A static web trainer with a simulated Hyprland desktop where every shortcut really tiles, swaps, floats, groups and moves windows across workspaces.
 
 ## Modes
 
@@ -21,13 +21,28 @@ Operating systems usually grab Super combos before a web page sees them (on Omar
 
 ## Run it
 
-No build step. Open `index.html` in a browser, or serve the folder:
+No build step, but it needs a local server because the scripts are ES modules:
 
 ```sh
-python -m http.server 8000
+npm run dev        # http://127.0.0.1:8000
 ```
 
-To host it for free, enable GitHub Pages on the `main` branch (Settings → Pages).
+Any static server works too (`python -m http.server 8000`).
+
+## Test it
+
+The tests need Node 22 or later.
+
+```sh
+npm install
+npx playwright install chromium
+npm test           # unit tests: layout geometry and every drill prompt
+npm run smoke      # browser smoke test: lessons, drills, stand-in key, phone width
+```
+
+## Deploy it
+
+Pushes to `main` run the tests and deploy to GitHub Pages (`.github/workflows/pages.yml`). Set Settings → Pages → Source to **GitHub Actions** once.
 
 ## Source of truth
 
