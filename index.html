@@ -965,7 +965,7 @@ measure();
 openApp('terminal');openApp('browser');openApp('btop');
 notify('Welcome to Omadojo','Hold Super and press K for the cheat sheet.',9000);
 if(CFG.mode==='drill')setMode('drill');else{if(CFG.mode==='blitz')D.blitz=null;renderScreen();renderCoach()}
-if(location.hash==='#debug')window.__od={S:()=>S,press,ACTS,BIND,setMode,startLesson,D,L};
+if(location.hash==='#debug')window.__od={S:()=>S,press,ACTS,BIND,setMode,startLesson,D,L,lessons:LESSONS.length,lessonKey:()=>{const st=L.lesson!=null&&LESSONS[L.lesson].steps[L.step];return st?canon(st.keys[0]):null}};
 })();
 </script>
 </body>
