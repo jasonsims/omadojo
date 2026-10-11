@@ -52,6 +52,18 @@ const toPw = combo => combo.split('+').map(k => KEY[k] || (/^\d$/.test(k) ? 'Dig
   }
   console.log(`drill: ${ok}/40`);
 
+  // Stand-in Super: with Caps Lock picked in Key setup, Caps Lock + Return opens a terminal.
+  await page.click('[data-mode="free"]');
+  if (await page.isHidden('#setup')) await page.click('#bSetup');
+  await page.click('[data-si="CapsLock"]');
+  const before = await page.evaluate(() => Object.keys(__od.S().wins).length);
+  await page.keyboard.down('CapsLock');
+  await page.keyboard.press('Enter');
+  await page.keyboard.up('CapsLock');
+  const opened = await page.evaluate(() => Object.keys(__od.S().wins).length) - before;
+  console.log(`stand-in super: ${opened === 1 ? 'ok' : 'FAILED'}`);
+  if (opened !== 1) errors.push('Caps Lock stand-in + Return did not open a terminal');
+
   // Phone width must not scroll sideways.
   const phone = await browser.newPage({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
   await phone.goto(url);
