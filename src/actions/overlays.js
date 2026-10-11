@@ -1,4 +1,4 @@
-import { THEMES } from '../config.js';
+import { setTheme, THEMES } from '../config.js';
 import { effects, osd, S } from '../model/desktop.js';
 import { ACTS } from './act.js';
 
@@ -26,7 +26,7 @@ function ovNav(c){
   if(c==='down')S.ovIdx=(S.ovIdx+1)%it.length;
   if(c==='up')S.ovIdx=(S.ovIdx-1+it.length)%it.length;
   if(c==='return'){const pick=it[S.ovIdx];
-    if(S.overlay==='theme'){effects.theme(THEMES[S.ovIdx+1][0]);osd('Theme: '+THEMES[S.ovIdx+1][1])}
+    if(S.overlay==='theme'){effects.theme(setTheme(THEMES[S.ovIdx+1][0]));osd('Theme: '+THEMES[S.ovIdx+1][1])}
     else osd((Array.isArray(pick)?pick[0]:pick)+(S.overlay==='clip'?' pasted':''));
     S.overlay=null}}
 

@@ -1,7 +1,7 @@
 import { $, esc, shuffle } from '../lib/util.js';
 import { canon, caps, capsAll, plain } from '../lib/keys.js';
 import { CFG, P } from '../config.js';
-import { ACTS, DECKS } from '../actions/act.js';
+import { ACTS, DECKS } from '../actions/index.js';
 import { LESSONS } from '../coach/lessons.js';
 import { askText, D, distractors, freeLog, L } from '../coach/state.js';
 import { hostWarn } from '../input/host.js';

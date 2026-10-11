@@ -2,8 +2,8 @@ import { $, shuffle } from '../lib/util.js';
 import { canon, plain } from '../lib/keys.js';
 import { CFG, P, saveCfg, saveProg } from '../config.js';
 import { fresh, openApp, S } from '../model/desktop.js';
-import { BIND, runAction } from '../actions/act.js';
-import { prep } from '../actions/ensure.js';
+import { BIND, runAction } from '../actions/index.js';
+import { prepare } from '../actions/ensure.js';
 import { ovNav } from '../actions/overlays.js';
 import { LESSONS } from './lessons.js';
 import { askText, D, distractors, L, pick } from './state.js';
@@ -20,7 +20,7 @@ function press(combo,src){
 
 function clearTimers(){D.timers.forEach(clearTimeout);D.timers=[];clearInterval(D.tick)}
 function nextPrompt(){clearTimers();if(D.blitz&&D.blitz.done)return;const a=pick();D.last=[a.id,...D.last].slice(0,3);
-  if(a.ensure)a.ensure();else prep();
+  prepare(a);
   D.item=a;D.ask=askText(a);D.t0=performance.now();D.missed=false;D.cool=false;D.fb='';D.fbc='';D.wrongOpt=null;
   const lvl=P(a.id).l;const delay=D.blitz?2500:lvl<2?0:lvl<4?3000:6000;D.revealed=delay===0;D.hintMs=delay;
   if(delay)D.timers.push(setTimeout(()=>{D.revealed=true;renderCoach()},delay));

@@ -14,4 +14,7 @@ function ensureGroup(min=2){ensureTiled(1);const ws=S.ws[S.cur];let sl=curSlot()
   let g=0;while(sl.wins.length<Math.max(2,min)&&g++<6){openApp(rnd(['terminal','browser','nvim']))}sl=curSlot();
   if(sl&&min>=2){sl.active=0;ws.focus=sl.wins[0]}}
 
-export { closeOverlay, ensureDir, ensureGroup, ensureTiled, prep, trim };
+// Set up a drill item before prompting for it, exactly as the coach does.
+function prepare(a){if(a.ensure)a.ensure();else prep()}
+
+export { closeOverlay, ensureDir, ensureGroup, ensureTiled, prep, prepare, trim };

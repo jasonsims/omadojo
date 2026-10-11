@@ -34,8 +34,8 @@ src/
   model/apps.js        the fake app catalog
   actions/act.js       ACTS, BIND, act(), DECKS, runAction()
   actions/<deck>.js    basics, tiling, workspaces, groups, apps, system
-  actions/index.js     imports the decks in cheat-sheet order
-  actions/ensure.js    drill preconditions
+  actions/index.js     registers the decks in cheat-sheet order; import ACTS/BIND from here
+  actions/ensure.js    drill preconditions and prepare(), which the coach runs before each prompt
   actions/overlays.js  OV, PANELS, ovNav()
   coach/state.js       D, L, pick(), distractors()
   coach/lessons.js     LESSONS
@@ -63,7 +63,7 @@ styles/
 
 3. **Actions and keys** (`src/actions/`, `src/lib/keys.js`, `src/input/`)
    - Every shortcut is one `act(id, deck, keys, label, run, opts)` call. `opts` can include `ask` (drill prompt, string or function), `ensure` (sets up preconditions before a drill prompt), `os` (warning that the host OS may grab it) and `drill:false`.
-   - That single table drives key handling (`BIND`), the Keys cheat sheet, the drill pool and tap-mode distractors. Add shortcuts by adding `act()` entries to the deck's file; do not special-case keys elsewhere. A new deck file must be imported from `actions/index.js`.
+   - That single table drives key handling (`BIND`), the Keys cheat sheet, the drill pool and tap-mode distractors. Add shortcuts by adding `act()` entries to the deck's file; do not special-case keys elsewhere. A new deck file must be imported from `actions/index.js`, and code outside `src/actions/` imports the table from `actions/index.js` so the decks are always registered.
    - Combos are canonical strings: modifiers in the order `super, ctrl, alt, shift`, then the key, e.g. `super+alt+shift+3`. Use `canon()` when writing them.
    - Keys are read from `event.code` (physical key), so Shift+1 is `1` and layouts don't matter.
    - Modifiers are tracked manually in `held` rather than trusting `event.metaKey` etc. This is what makes the **stand-in Super key** (`CFG.standin`) work. `prune()` drops stale modifiers using the event flags.

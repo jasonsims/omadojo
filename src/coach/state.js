@@ -1,6 +1,6 @@
 import { shuffle } from '../lib/util.js';
 import { CFG, P } from '../config.js';
-import { ACTS } from '../actions/act.js';
+import { ACTS } from '../actions/index.js';
 
 // Coach state shared by the engine and the coach panel: Drill (D), Learn (L), and the drill picker.
 // pick() weights shortcuts by mastery level 0-5 so weak ones come up more often.

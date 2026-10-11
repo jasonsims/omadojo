@@ -1,8 +1,8 @@
 import { $ } from './lib/util.js';
 import { canon, keyName, MODCODE, MODS, plain } from './lib/keys.js';
-import { CFG, resetProgress, saveCfg, THEMES } from './config.js';
+import { CFG, resetProgress, saveCfg, setTheme, THEMES } from './config.js';
 import { effects, fresh, notify, openApp, osd, S } from './model/desktop.js';
-import { ACTS, BIND } from './actions/act.js';
+import { ACTS, BIND } from './actions/index.js';
 import { after, miss, nextPrompt, press, setMode, startBlitz, startLesson } from './coach/engine.js';
 import { LESSONS } from './coach/lessons.js';
 import { D, L } from './coach/state.js';
@@ -13,7 +13,6 @@ import { measure, renderScreen, showOsd } from './view/screen.js';
 import { openSetup, renderSetup } from './view/setup.js';
 import { beep } from './view/sound.js';
 import { applyTheme } from './view/theme.js';
-import './actions/index.js';
 
 // Entry point: wires DOM events to the coach and view, then boots the desktop.
 /* ---------- events ---------- */
@@ -33,7 +32,7 @@ $('#coach').addEventListener('click',e=>{const t=e.target.closest('button');if(!
     if(CFG.mode==='learn'&&L.lesson!=null){const st=LESSONS[L.lesson].steps[L.step];if(st.keys.map(canon).includes(o)){if(S.overlay&&['up','down','return','escape'].includes(o)){press(o)}else if(BIND[o])press(o);else after(o,null)}
       else{L.fb=`That's ${plain(o)}. Look again.`;beep(false);renderCoach()}return}
     if(D.item&&!D.cool){if(D.item.keys.includes(o))press(o);else{D.wrongOpt=o;const a=BIND[o];miss(a&&a.label,o)}}}});
-$('#bTheme').addEventListener('click',()=>{const i=THEMES.findIndex(t=>t[0]===CFG.theme);applyTheme(THEMES[(i+1)%THEMES.length][0])});
+$('#bTheme').addEventListener('click',()=>{const i=THEMES.findIndex(t=>t[0]===CFG.theme);applyTheme(setTheme(THEMES[(i+1)%THEMES.length][0]))});
 $('#bSound').addEventListener('click',()=>{CFG.sound=!CFG.sound;saveCfg();$('#bSound').textContent=CFG.sound?'Sound on':'Sound off'});
 $('#bSetup').addEventListener('click',()=>openSetup($('#setup').hidden));
 $('#bLock').addEventListener('click',async()=>{const b=$('#bLock');
@@ -74,7 +73,7 @@ setInterval(()=>{if(!S.overlay||S.overlay==='lock')renderScreen()},30000);
 
 /* ---------- boot ---------- */
 Object.assign(effects,{osd:showOsd,render:renderScreen,theme:applyTheme});
-applyTheme(CFG.theme);
+applyTheme(setTheme(CFG.theme));
 if(!CFG.seenSetup){CFG.seenSetup=true;saveCfg();if(!matchMedia('(pointer:coarse)').matches)openSetup(true)}$('#bSound').textContent=CFG.sound?'Sound on':'Sound off';renderSetup();
 measure();
 openApp('terminal');openApp('browser');openApp('btop');
