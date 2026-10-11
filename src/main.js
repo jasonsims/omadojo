@@ -1,43 +1,8 @@
-const $=s=>document.querySelector(s);
-const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const store={get(k,d){try{const v=localStorage.getItem('omadojo.'+k);return v==null?d:JSON.parse(v)}catch(e){return d}},
-             set(k,v){try{localStorage.setItem('omadojo.'+k,JSON.stringify(v))}catch(e){}}};
-const rnd=a=>a[Math.floor(Math.random()*a.length)];
-const shuffle=a=>{a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a};
-
-/* ---------- keys ---------- */
-const MODS=['super','ctrl','alt','shift'];
-function canon(s){const p=s.toLowerCase().split('+').map(x=>x.trim());return[...MODS.filter(m=>p.includes(m)),...p.filter(x=>!MODS.includes(x))].join('+')}
-const KN={super:'Super',ctrl:'Ctrl',alt:'Alt',shift:'Shift',return:'Return',space:'Space',escape:'Esc',tab:'Tab',backspace:'Backspace',delete:'Delete',
-  minus:'-',equal:'=',slash:'/',comma:',',period:'.',backquote:'`',left:'←',right:'→',up:'↑',down:'↓',home:'Home'};
-const kname=k=>KN[k]||k.toUpperCase();
-const caps=c=>c.split('+').map(k=>`<kbd class="kc${k==='super'?' sup':''}">${esc(kname(k))}</kbd>`).join('<i class="plus">+</i>');
-const plain=c=>c.split('+').map(kname).join(' + ');
-const capsAll=keys=>keys.map(caps).join('<span class="alt">or</span>');
-const CODEKEY={Enter:'return',NumpadEnter:'return',Space:'space',Escape:'escape',Tab:'tab',Backspace:'backspace',Delete:'delete',Minus:'minus',
-  Equal:'equal',Slash:'slash',Comma:'comma',Period:'period',Backquote:'backquote',ArrowLeft:'left',ArrowRight:'right',ArrowUp:'up',ArrowDown:'down',
-  Home:'home',BracketLeft:'[',BracketRight:']',NumpadSubtract:'minus',NumpadAdd:'equal'};
-const MODCODE={ShiftLeft:'shift',ShiftRight:'shift',ControlLeft:'ctrl',ControlRight:'ctrl',AltLeft:'alt',AltRight:'alt',MetaLeft:'super',MetaRight:'super',OSLeft:'super',OSRight:'super'};
-function keyName(e){const c=e.code||'';
-  if(/^Key[A-Z]$/.test(c))return c.slice(3).toLowerCase();
-  if(/^Digit\d$/.test(c))return c.slice(5);
-  if(/^Numpad\d$/.test(c))return c.slice(6);
-  if(CODEKEY[c])return CODEKEY[c];
-  if(e.key&&e.key.length===1)return e.key.toLowerCase();
-  return null}
-
-/* ---------- config & progress ---------- */
-const CFG=Object.assign({theme:'auto',sound:true,standin:null,input:null,decks:['basics','tiling','workspaces'],mode:'learn',wp:0,best:0,done:[]},store.get('cfg',{}));
-if(!CFG.input)CFG.input=typeof matchMedia==='function'&&matchMedia('(pointer:coarse)').matches?'taps':'keys';
-const saveCfg=()=>store.set('cfg',CFG);
-let PROG=store.get('prog',{});
-const P=id=>PROG[id]||(PROG[id]={l:0,n:0,ok:0,ms:0});
-const saveProg=()=>store.set('prog',PROG);
+import { $, esc, rnd, shuffle } from './lib/util.js';
+import { canon, caps, capsAll, keyName, MODCODE, MODS, plain } from './lib/keys.js';
+import { CFG, P, resetProgress, saveCfg, saveProg, setTheme, THEMES } from './config.js';
 
 /* ---------- themes ---------- */
-const THEMES=[['auto','System'],['tokyo-night','Tokyo Night'],['catppuccin','Catppuccin'],['gruvbox','Gruvbox'],['everforest','Everforest'],['nord','Nord'],
-  ['rose-pine','Rosé Pine'],['kanagawa','Kanagawa'],['matte-black','Matte Black'],['catppuccin-latte','Catppuccin Latte'],['flexoki-light','Flexoki Light']];
-function setTheme(id){if(!THEMES.some(t=>t[0]===id))id='auto';CFG.theme=id;saveCfg();return id}
 function applyTheme(id){id=setTheme(id);const r=document.documentElement;
   if(id==='auto')r.removeAttribute('data-om');else r.setAttribute('data-om',id);
   $('#bTheme').textContent='Theme: '+THEMES.find(t=>t[0]===id)[1]}
@@ -627,7 +592,7 @@ $('#standinSeg').addEventListener('click',e=>{const b=e.target.closest('button')
 $('#inputSeg').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;CFG.input=b.dataset.input;saveCfg();renderSetup();renderCoach()});
 let resetArm=false;
 $('#bReset').addEventListener('click',()=>{const b=$('#bReset');if(!resetArm){resetArm=true;b.textContent='Click again to erase';setTimeout(()=>{resetArm=false;b.textContent='Reset progress'},3000);return}
-  PROG={};saveProg();CFG.done=[];CFG.best=0;saveCfg();resetArm=false;b.textContent='Progress erased';renderCoach()});
+  resetProgress();resetArm=false;b.textContent='Progress erased';renderCoach()});
 
 window.addEventListener('keydown',e=>{
   if(capturing){e.preventDefault();capturing=false;CFG.standin=e.code||null;saveCfg();held.clear();renderSetup();renderCoach();return}
