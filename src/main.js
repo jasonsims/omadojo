@@ -1,121 +1,18 @@
 import { $, esc, rnd, shuffle } from './lib/util.js';
 import { canon, caps, capsAll, keyName, MODCODE, MODS, plain } from './lib/keys.js';
 import { CFG, P, resetProgress, saveCfg, saveProg, setTheme, THEMES } from './config.js';
+import { APPS } from './model/apps.js';
+import { closeWin, curSlot, curWs, cycle, detach, effects, focusId, fresh, gotoWs, gstep, moveTo, neighbor, notify, openApp, osd, resize, S, slotOf, toScratch, W } from './model/desktop.js';
+import { floatRect, setAspect, tiled, tileRects } from './model/layout.js';
 
 /* ---------- themes ---------- */
 function applyTheme(id){id=setTheme(id);const r=document.documentElement;
   if(id==='auto')r.removeAttribute('data-om');else r.setAttribute('data-om',id);
   $('#bTheme').textContent='Theme: '+THEMES.find(t=>t[0]===id)[1]}
 
-/* ---------- apps ---------- */
-const CMDS=[['omarchy theme next','Theme set to Gruvbox'],['git status','On branch main, nothing to commit'],['hyprctl clients | wc -l','4'],
-  ['yay -Syu','there is nothing to do'],['omarchy plugin list','omarchy.bar  enabled'],['ls ~/Work','dojo  notes  site'],['bin/dev','Puma starting on :3000']];
-const term=(w,t)=>{const c=CMDS[w.id%CMDS.length];return `<div class="wtitle"><span>${t}</span><span>~/Work</span></div><div><span class="c1">~/Work</span> <span class="c2">❯</span> ${esc(c[0])}</div><div class="dm">${esc(c[1])}</div><div><span class="c1">~/Work</span> <span class="c2">❯</span> <span class="cur"></span></div>`};
-const page=(url,extra='')=>()=>`<div class="url">${url}</div>${extra}<div class="sk h"></div><div class="sk"></div><div class="sk"></div><div class="sk s"></div><div class="sk"></div><div class="sk s"></div>`;
-const APPS={
-  terminal:{label:'Terminal',body:w=>term(w,'foot')},
-  tmux:{label:'Tmux',body:w=>term(w,'tmux · 0:zsh*')},
-  herdr:{label:'Herdr',body:w=>`<div class="wtitle"><span>herdr</span><span>agents</span></div><div><span class="c2">●</span> claude · fixing bar plugin</div><div><span class="c4">●</span> codex · waiting</div><div><span class="dm">●</span> opencode · idle</div>`},
-  browser:{label:'Chromium',body:page('omarchy.org/manual/hotkeys')},
-  private:{label:'Chromium (private)',body:page('<span class="c3">private</span> · new tab')},
-  files:{label:'Files',body:()=>`<div class="wtitle"><span>Files</span><span>~/</span></div>${['Desktop','Documents','Downloads','Music','Pictures','Videos','Work'].map(f=>`<div><span class="c1">▸</span> ${f}</div>`).join('')}`},
-  nvim:{label:'Neovim',body:()=>`<div><span class="c3">def</span> <span class="c1">tile</span>(windows)</div><div>&nbsp;&nbsp;windows.<span class="c4">dwindle!</span></div><div><span class="c3">end</span></div>${'<div class="dm">~</div>'.repeat(5)}<div class="nvst">NORMAL  dojo.rb</div>`},
-  music:{label:'Spotify',body:()=>`<div class="wtitle"><span>Spotify</span><span>♫</span></div><div><b>Now playing</b></div><div class="dm">Tiling Dreams · The Workspaces</div><div class="sk" style="width:40%;background:var(--ok)"></div>`},
-  btop:{label:'btop',float:true,body:()=>`<div class="wtitle"><span>btop</span><span>cpu 12%</span></div><div>cpu <span class="c2">▂▃▅▇▅▃▂▃▅▆</span></div><div>mem <span class="c4">▅▅▅▅▆▆▆▆▆▆</span></div><div>net <span class="c1">▁▁▂▁▃▁▁▂▁▁</span></div><div class="dm">proc hyprland 1.2%</div>`},
-  passwords:{label:'1Password',float:true,body:()=>`<div class="wtitle"><span>1Password</span><span></span></div><div style="text-align:center;margin-top:1.2em">🔒<br>Unlock 1Password</div>`},
-  calc:{label:'Calculator',float:true,body:()=>`<div style="text-align:right;font-size:1.4em">1337</div><div class="calcg">${'789÷456×123−0.=+'.split('').map(c=>`<span>${c}</span>`).join('')}</div>`},
-  obsidian:{label:'Obsidian',body:()=>`<div class="wtitle"><span>Obsidian</span><span>vault</span></div><div class="c3"># Omarchy notes</div><div>- Super + J flips the split</div><div>- Super + S for scratchpad</div>`},
-  email:{label:'HEY',body:page('app.hey.com/imbox')},
-  calendar:{label:'HEY Calendar',body:page('app.hey.com/calendar')},
-  chatgpt:{label:'ChatGPT',body:page('chatgpt.com')},
-  grok:{label:'Grok',body:page('grok.com')},
-  signal:{label:'Signal',body:()=>`<div class="wtitle"><span>Signal</span><span></span></div><div><span class="c1">Ana</span> did you try scrolling layout?</div><div><span class="c2">You</span> Super + L, love it</div>`},
-  youtube:{label:'YouTube',body:page('youtube.com')},
-  docker:{label:'LazyDocker',body:w=>`<div class="wtitle"><span>lazydocker</span><span></span></div><div><span class="c2">●</span> postgres  up 3h</div><div><span class="c2">●</span> redis     up 3h</div><div class="dm">○ mailcatcher</div>`},
-  write:{label:'Omawrite',body:()=>`<div class="wtitle"><span>Omawrite</span><span>412 words</span></div><div>The trick is to stop reaching for the mouse.</div><div class="cur"></div>`},
-  maps:{label:'Google Maps',body:page('maps.google.com')},
-  photos:{label:'Google Photos',body:page('photos.google.com')},
-  x:{label:'X',body:page('x.com/home')},
-  whatsapp:{label:'WhatsApp',body:page('web.whatsapp.com')},
-};
-
 /* ---------- desktop state ---------- */
-// Side effects the model asks for. Boot wires these to the view; outside a browser they do nothing.
-const effects={osd(){},render(){},theme(){}};
-const mkWs=()=>({slots:[],floats:[],focus:null,layout:'dwindle',flips:{},ratios:{},colW:{},scroll:0});
-let S,NID=1;
-function fresh(){S={ws:{1:mkWs(),2:mkWs(),3:mkWs(),4:mkWs(),S:mkWs()},cur:1,prev:2,scratch:false,pinned:[],wins:{},dying:[],
-  bar:true,gaps:true,dfull:false,night:false,silent:false,zoom:1,overlay:null,ovIdx:0,notifs:[],hist:[],clip:['ssh-ed25519 AAAA…','https://omarchy.org/manual/','hl.bind("SUPER + J", …)'],slideDir:0,osd:''}}
-fresh();
-const curWs=()=>S.scratch?S.ws.S:S.ws[S.cur];
-const tiled=ws=>ws.slots.map(sl=>sl.wins[sl.active]);
-const slotOf=(ws,id)=>ws.slots.findIndex(sl=>sl.wins.includes(id));
-function visibleIds(ws){return[...tiled(ws),...ws.floats,...(S.scratch?[]:S.pinned)]}
-function focusId(){const ws=curWs();const v=visibleIds(ws);if(!v.includes(ws.focus))ws.focus=v.length?(tiled(ws).slice(-1)[0]??v[v.length-1]):null;return ws.focus}
-function W(id){return S.wins[id]}
-
-function openApp(app,o={}){
-  const id=NID++;const w={id,app,full:0,fake:false,pseudo:false,transp:false};S.wins[id]=w;
-  const ws=curWs();const f=focusId();
-  Object.values(S.wins).forEach(x=>{if(x.full&&locate(x.id).ws===ws)x.full=0});
-  if(APPS[app].float&&!o.tile){ws.floats.push(id)}
-  else{const si=f!=null?slotOf(ws,f):-1;
-    if(si>=0&&ws.slots[si].grouped&&!o.noGroup){const sl=ws.slots[si];sl.wins.push(id);sl.active=sl.wins.length-1}
-    else ws.slots.splice(si>=0?si+1:ws.slots.length,0,{wins:[id],active:0,grouped:false})}
-  ws.focus=id;w.born=true;return id}
-function locate(id){for(const k of Object.keys(S.ws)){const ws=S.ws[k];const si=slotOf(ws,id);if(si>=0)return{ws,key:k,si};if(ws.floats.includes(id))return{ws,key:k,fl:true}}
-  if(S.pinned.includes(id))return{pinned:true};return{}}
-function detach(id){const L=locate(id);
-  if(L.pinned){S.pinned.splice(S.pinned.indexOf(id),1);return L}
-  if(!L.ws)return L;const ws=L.ws;
-  if(L.fl)ws.floats.splice(ws.floats.indexOf(id),1);
-  else{const sl=ws.slots[L.si];const i=sl.wins.indexOf(id);sl.wins.splice(i,1);
-    if(!sl.wins.length)ws.slots.splice(L.si,1);else{sl.active=Math.min(sl.active,sl.wins.length-1);if(ws.focus===id)ws.focus=sl.wins[sl.active]}}
-  if(ws.focus===id){const t=tiled(ws);ws.focus=t.length?t[Math.min(L.si??t.length-1,t.length-1)]:(ws.floats.slice(-1)[0]??null)}
-  return L}
-function closeWin(id){if(id==null)return false;detach(id);S.dying.push(id);delete S.wins[id];return true}
-function gotoWs(n){if(S.scratch){S.scratch=false}if(n===S.cur)return;S.slideDir=n>S.cur?1:-1;S.prev=S.cur;S.cur=n}
-function moveTo(n,follow){const id=focusId();if(id==null||S.pinned.includes(id))return false;const L=detach(id);const t=S.ws[n];
-  if(L.fl)t.floats.push(id);else t.slots.push({wins:[id],active:0,grouped:false});t.focus=id;W(id).full=0;
-  if(follow){S.scratch=false;gotoWs(n)}return true}
-function toScratch(){const id=focusId();if(id==null||S.scratch)return false;const L=detach(id);const t=S.ws.S;if(L.fl)t.floats.push(id);else t.slots.push({wins:[id],active:0,grouped:false});t.focus=id;return true}
 
 /* geometry (normalized to the work area) */
-let ASPECT=960/578;// work area width / height; the view keeps it in sync with the screen
-const setAspect=a=>{ASPECT=a};
-function tileRects(ws){const ids=tiled(ws),out={},orient={};
-  if(ws.layout==='scrolling'){let x=0;const pos={};const cw=id=>ids.length===1?1:(ws.colW[id]||.6);
-    ids.forEach(id=>{pos[id]=x;x+=cw(id)});const f=ws.focus;
-    if(pos[f]!=null){if(pos[f]<ws.scroll)ws.scroll=pos[f];if(pos[f]+cw(f)>ws.scroll+1)ws.scroll=pos[f]+cw(f)-1}
-    ws.scroll=Math.max(0,Math.min(ws.scroll,Math.max(0,x-1)));
-    ids.forEach(id=>out[id]={x:pos[id]-ws.scroll,y:0,w:cw(id),h:1});return{rects:out,orient}}
-  let r={x:0,y:0,w:1,h:1};const ar=ASPECT;
-  ids.forEach((id,i)=>{if(i===ids.length-1){out[id]=r;return}
-    let side=r.w*ar>=r.h;if(ws.flips[i])side=!side;orient[i]=side?'h':'v';const k=ws.ratios[i]??.5;
-    if(side){out[id]={x:r.x,y:r.y,w:r.w*k,h:r.h};r={x:r.x+r.w*k,y:r.y,w:r.w*(1-k),h:r.h}}
-    else{out[id]={x:r.x,y:r.y,w:r.w,h:r.h*k};r={x:r.x,y:r.y+r.h*k,w:r.w,h:r.h*(1-k)}}});
-  return{rects:out,orient}}
-const floatRect=(i,a)=>{const w=a==='calc'?.26:.5,h=a==='calc'?.5:.55;return{x:.25+.05*i,y:.14+.06*i,w,h}};
-function neighbor(dir){const ws=curWs();const f=focusId();if(f==null)return null;const{rects}=tileRects(ws);
-  let fr=rects[f];const fi=ws.floats.indexOf(f);if(!fr&&fi>=0)fr=floatRect(fi,W(f).app);if(!fr)return null;
-  return nearest(rects,f,fr,dir)}
-// The tiled window nearest to rect fr (window f) in a direction, or null.
-function nearest(rects,f,fr,dir){
-  const e=.002,cx=fr.x+fr.w/2,cy=fr.y+fr.h/2;let best=null,bs=1e9;
-  for(const k of Object.keys(rects)){const id=+k;if(id===f)continue;const r=rects[k];
-    const oy=r.y<fr.y+fr.h-e&&r.y+r.h>fr.y+e,ox=r.x<fr.x+fr.w-e&&r.x+r.w>fr.x+e;let ok=false,d=0;
-    if(dir==='left'){ok=r.x+r.w<=fr.x+e;d=(fr.x-(r.x+r.w))*10+Math.abs(r.y+r.h/2-cy)+(oy?0:5)}
-    if(dir==='right'){ok=r.x>=fr.x+fr.w-e;d=(r.x-(fr.x+fr.w))*10+Math.abs(r.y+r.h/2-cy)+(oy?0:5)}
-    if(dir==='up'){ok=r.y+r.h<=fr.y+e;d=(fr.y-(r.y+r.h))*10+Math.abs(r.x+r.w/2-cx)+(ox?0:5)}
-    if(dir==='down'){ok=r.y>=fr.y+fr.h-e;d=(r.y-(fr.y+fr.h))*10+Math.abs(r.x+r.w/2-cx)+(ox?0:5)}
-    if(ok&&d<bs){bs=d;best=id}}
-  return best}
-
-/* ---------- UI feedback inside the screen ---------- */
-function osd(t){S.osd=t;effects.osd(t)}
-let nidN=1;
-function notify(title,body,ttl){if(S.silent)return;const n={id:nidN++,title,body};S.notifs.unshift(n);S.hist.unshift(n);if(S.notifs.length>3)S.notifs.pop();
-  if(ttl)setTimeout(()=>{const i=S.notifs.indexOf(n);if(i>=0){S.notifs.splice(i,1);effects.render()}},ttl)}
 
 /* ---------- actions ---------- */
 const ACTS=[],BIND={};
@@ -163,12 +60,6 @@ act('shrinkv','tiling',['super+shift+minus'],'Shrink window up',()=>resize('v',1
 act('growv','tiling',['super+shift+equal'],'Expand window down',()=>resize('v',-1),{drill:false});
 act('alttab','tiling',['alt+tab'],'Next window',()=>cycle(1),{ask:'Cycle to the next window on this workspace',os:OS_NOTE,ensure:()=>ensureTiled(2)});
 act('alttabb','tiling',['alt+shift+tab'],'Previous window',()=>cycle(-1),{drill:false,os:OS_NOTE});
-function cycle(d){const ws=curWs(),v=visibleIds(ws);if(v.length<2)return;const i=v.indexOf(focusId());ws.focus=v[(i+d+v.length)%v.length]}
-function resize(axis,dir){const ws=curWs(),f=focusId();if(ws.layout==='scrolling'){ws.colW[f]=Math.min(.95,Math.max(.3,(ws.colW[f]||.6)-dir*.1));return}
-  const i=slotOf(ws,f);if(i<0)return;const{orient}=tileRects(ws);const want=axis==='h'?'h':'v';
-  for(let j=i-1;j>=0;j--)if(orient[j]===want){ws.ratios[j]=Math.min(.8,Math.max(.2,(ws.ratios[j]??.5)+dir*.08));return}
-  if(orient[i]===want){ws.ratios[i]=Math.min(.8,Math.max(.2,(ws.ratios[i]??.5)-dir*.08));return}
-  osd('No border to move that way')}
 
 // workspaces
 for(const n of [1,2,3,4]){
@@ -184,7 +75,6 @@ act('scratch','workspaces',['super+s','super+backquote'],'Scratchpad',()=>{S.scr
 act('toscratch','workspaces',['super+alt+s','super+shift+backquote'],'Move to scratchpad',()=>{if(!toScratch())osd('Already on the scratchpad')},{ask:'Stash the focused window on the scratchpad',ensure:()=>{prep();ensureTiled(2)}});
 
 // groups
-const curSlot=()=>{const ws=curWs(),i=slotOf(ws,focusId());return i>=0?ws.slots[i]:null};
 act('group','groups',['super+g'],'Toggle group',()=>{const ws=curWs(),i=slotOf(ws,focusId());if(i<0){osd('Tile the window first');return}const sl=ws.slots[i];
   if(sl.grouped&&sl.wins.length>1){ws.slots.splice(i,1,...sl.wins.map(id=>({wins:[id],active:0,grouped:false})))}else sl.grouped=!sl.grouped},
   {ask:()=>curSlot()?.grouped?'Break the group apart':'Turn the focused window into a group (tabs)',ensure:()=>ensureTiled(2)});
@@ -198,7 +88,6 @@ act('gout','groups',['super+alt+g'],'Move out of group',()=>{const ws=curWs(),f=
 for(const n of [1,2,3,4,5])act('gjump'+n,'groups',['super+alt+'+n],'Group tab '+n,()=>{const sl=curSlot();if(sl&&sl.grouped&&sl.wins[n-1]!=null){sl.active=n-1;curWs().focus=sl.wins[n-1]}},{drill:n===2,ask:'Jump straight to tab '+n+' of the group',ensure:()=>ensureGroup(n)});
 for(const d of ['left','right','up','down'])act('ginto-'+d,'groups',['super+alt+'+d],'Move into group '+d,()=>{const ws=curWs(),f=focusId(),n=neighbor(d);if(n==null)return;const b=slotOf(ws,n);
   if(!ws.slots[b].grouped){osd('That window is not a group');return}detach(f);const t=ws.slots[slotOf(ws,n)];t.wins.push(f);t.active=t.wins.length-1;ws.focus=f},{drill:false});
-function gstep(d){const ws=curWs(),sl=curSlot();if(!sl||!sl.grouped||sl.wins.length<2)return osd('No group here');sl.active=(sl.active+d+sl.wins.length)%sl.wins.length;ws.focus=sl.wins[sl.active]}
 
 // apps
 const AK=[['tmux','super+alt+return','Tmux terminal'],['herdr','super+ctrl+return','Herdr (agent manager)'],['private','super+alt+shift+b','Private browser'],
