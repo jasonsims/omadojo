@@ -1,8 +1,8 @@
 // Smoke test: plays every lesson and a batch of drill prompts with real key events.
-// Usage: npm i -D playwright && npx playwright install chromium && node tests/smoke.js
+// Usage: npm install && npx playwright install chromium && npm run smoke
 // Set CHROMIUM_PATH to use an existing Chromium binary instead.
-const { chromium } = require('playwright');
-const path = require('path');
+import { chromium } from 'playwright';
+import { serve } from '../scripts/serve.js';
 
 const KEY = { super: 'Meta', ctrl: 'Control', alt: 'Alt', shift: 'Shift', return: 'Enter', space: 'Space',
   escape: 'Escape', tab: 'Tab', backspace: 'Backspace', delete: 'Delete', minus: 'Minus', equal: 'Equal',
@@ -11,11 +11,13 @@ const KEY = { super: 'Meta', ctrl: 'Control', alt: 'Alt', shift: 'Shift', return
 const toPw = combo => combo.split('+').map(k => KEY[k] || (/^\d$/.test(k) ? 'Digit' + k : 'Key' + k.toUpperCase())).join('+');
 
 (async () => {
+  const server = await serve();
+  const url = `http://127.0.0.1:${server.address().port}/`;
   const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
   const page = await browser.newPage({ viewport: { width: 1300, height: 860 } });
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
-  await page.goto('file://' + path.resolve(__dirname, '..', 'index.html') + '#debug');
+  await page.goto(url + '#debug');
   await page.evaluate(() => localStorage.clear());
   await page.reload();
   await page.waitForTimeout(300);
@@ -52,11 +54,12 @@ const toPw = combo => combo.split('+').map(k => KEY[k] || (/^\d$/.test(k) ? 'Dig
 
   // Phone width must not scroll sideways.
   const phone = await browser.newPage({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
-  await phone.goto('file://' + path.resolve(__dirname, '..', 'index.html'));
+  await phone.goto(url);
   const sw = await phone.evaluate(() => document.documentElement.scrollWidth);
   if (sw > 390) errors.push('horizontal scroll at 390px: ' + sw);
 
   await browser.close();
+  server.close();
   if (errors.length) { console.error('FAIL\n' + errors.join('\n')); process.exit(1); }
   console.log('PASS');
 })();
