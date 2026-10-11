@@ -45,7 +45,8 @@
 
 *{box-sizing:border-box}
 [hidden]{display:none!important}
-html,body{background:var(--bg);color:var(--fg)}
+html,body{margin:0;background:var(--bg);color:var(--fg)}
+body{padding-block:env(safe-area-inset-top,0px) env(safe-area-inset-bottom,0px)}
 body{font-family:var(--mono);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
 button{font:inherit;color:inherit}
 a{color:var(--accent)}
@@ -239,6 +240,7 @@ kbd.kc.sup{background:var(--accent);border-color:color-mix(in srgb,var(--accent)
 .foot{color:var(--dim);font-size:12px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:12px}
 .foot p{margin:0;max-width:80ch}
 .small{font-size:11.5px;color:var(--dim)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 @media (max-width:520px){.wrap{padding-inline:16px}.ask{font-size:18px}.tag{display:none}}
 @media (prefers-reduced-motion: reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
 </style>
@@ -263,11 +265,12 @@ kbd.kc.sup{background:var(--accent);border-color:color-mix(in srgb,var(--accent)
     <div>
       <h3>Is Super reaching the page?</h3>
       <p>Hold your Super key (⊞ Windows, ⌘ Mac). The <b>SUPER</b> light under the screen should glow. Then press Super + Return and a terminal should open in the fake desktop.</p>
+      <p class="fb tip" id="platNote"></p>
       <p>Your real OS often grabs Super combos first. On Omarchy, Hyprland will open a real terminal instead. Fix it with <b>Lock keys</b>: Chromium-based browsers go fullscreen and ask the compositor to pass shortcuts through (hold Esc to leave).</p>
     </div>
     <div>
       <h3>Or pick a stand-in key</h3>
-      <p>The stand-in acts as Super while held. Caps Lock or Right Ctrl work well on Linux and Windows. Mac users can keep ⌘.</p>
+      <p id="standinIntro">The stand-in acts as Super while held.</p>
       <div class="seg" id="standinSeg"></div>
       <p class="small" id="standinNote" style="margin-top:8px"></p>
     </div>
@@ -299,7 +302,8 @@ kbd.kc.sup{background:var(--accent);border-color:color-mix(in srgb,var(--accent)
         <div class="cast" id="cast"><span class="small">Every shortcut you press shows up here.</span></div>
       </div>
     </div>
-    <aside class="coach" id="coach" aria-live="polite"></aside>
+    <aside class="coach" id="coach"></aside>
+    <p class="sr" id="live" aria-live="polite"></p>
   </main>
 
   <footer class="foot">
@@ -350,7 +354,7 @@ const saveProg=()=>store.set('prog',PROG);
 /* ---------- themes ---------- */
 const THEMES=[['auto','System'],['tokyo-night','Tokyo Night'],['catppuccin','Catppuccin'],['gruvbox','Gruvbox'],['everforest','Everforest'],['nord','Nord'],
   ['rose-pine','Rosé Pine'],['kanagawa','Kanagawa'],['matte-black','Matte Black'],['catppuccin-latte','Catppuccin Latte'],['flexoki-light','Flexoki Light']];
-function applyTheme(id){CFG.theme=id;saveCfg();const r=document.documentElement;
+function applyTheme(id){if(!THEMES.some(t=>t[0]===id))id='auto';CFG.theme=id;saveCfg();const r=document.documentElement;
   if(id==='auto')r.removeAttribute('data-om');else r.setAttribute('data-om',id);
   $('#bTheme').textContent='Theme: '+THEMES.find(t=>t[0]===id)[1]}
 
@@ -388,8 +392,8 @@ const APPS={
 
 /* ---------- desktop state ---------- */
 const mkWs=()=>({slots:[],floats:[],focus:null,layout:'dwindle',flips:{},ratios:{},colW:{},scroll:0});
-let S;
-function fresh(){S={ws:{1:mkWs(),2:mkWs(),3:mkWs(),4:mkWs(),S:mkWs()},cur:1,prev:2,scratch:false,pinned:[],wins:{},nid:1,
+let S,NID=1;
+function fresh(){S={ws:{1:mkWs(),2:mkWs(),3:mkWs(),4:mkWs(),S:mkWs()},cur:1,prev:2,scratch:false,pinned:[],wins:{},
   bar:true,gaps:true,dfull:false,night:false,silent:false,zoom:1,overlay:null,ovIdx:0,notifs:[],hist:[],clip:['ssh-ed25519 AAAA…','https://omarchy.org/manual/','hl.bind("SUPER + J", …)'],slideDir:0,osd:''}}
 fresh();
 const curWs=()=>S.scratch?S.ws.S:S.ws[S.cur];
@@ -400,9 +404,8 @@ function focusId(){const ws=curWs();const v=visibleIds(ws);if(!v.includes(ws.foc
 function W(id){return S.wins[id]}
 
 function openApp(app,o={}){
-  const id=S.nid++;const w={id,app,full:0,fake:false,pseudo:false,transp:false};S.wins[id]=w;
+  const id=NID++;const w={id,app,full:0,fake:false,pseudo:false,transp:false};S.wins[id]=w;
   const ws=curWs();const f=focusId();
-  ws.layout==='dwindle'||ws.layout==='scrolling';
   Object.values(S.wins).forEach(x=>{if(x.full&&locate(x.id).ws===ws)x.full=0});
   if(APPS[app].float&&!o.tile){ws.floats.push(id)}
   else{const si=f!=null?slotOf(ws,f):-1;
@@ -479,7 +482,7 @@ act('sysmenu','basics',['super+escape'],'System menu',toggleOv('system'),{ask:'O
 act('keys','basics',['super+k'],'Keybindings',toggleOv('keys'),{ask:'Show the keybindings cheat sheet'});
 act('lock','basics',['super+ctrl+l'],'Lock screen',openOv('lock'),{ask:'Lock the computer'});
 act('files','basics',['super+shift+f'],'File manager',()=>openApp('files'),{ask:'Open the file manager'});
-act('closeall','basics',['ctrl+alt+delete'],'Close all windows',()=>{Object.keys(S.ws).forEach(k=>tiled(S.ws[k]));[...Object.keys(S.wins)].forEach(id=>closeWin(+id))},{ask:'Close every window at once',os:OS_NOTE,drill:false});
+act('closeall','basics',['ctrl+alt+delete'],'Close all windows',()=>{[...Object.keys(S.wins)].forEach(id=>closeWin(+id))},{ask:'Close every window at once',os:OS_NOTE,drill:false});
 
 // tiling
 const DIRS={left:'left',right:'right',up:'up',down:'down'};
@@ -586,13 +589,12 @@ function closeOverlay(){S.overlay=null}
 function trim(max){const ws=S.ws[S.cur];while(ws.slots.length>max){const sl=ws.slots[0];[...sl.wins].forEach(id=>closeWin(id))}while(ws.floats.length>1)closeWin(ws.floats[0])}
 function prep(){closeOverlay();S.scratch=false;S.zoom=1;Object.values(S.wins).forEach(w=>{w.full=0;w.fake=false})}
 function ensureTiled(n,allowFloat,layout){prep();const ws=S.ws[S.cur];if(layout!=='any')ws.layout='dwindle';trim(5);
-  ws.slots.forEach(sl=>{if(sl.grouped&&sl.wins.length>2){}});
   let guard=0;while(ws.slots.length<n&&guard++<8)openApp(rnd(['terminal','browser','files','nvim','obsidian']),{noGroup:true,tile:true});
   const f=focusId();if((f==null||ws.floats.includes(f)||S.pinned.includes(f))&&ws.slots.length)ws.focus=tiled(ws)[ws.slots.length-1]}
 function ensureDir(d){ensureTiled(2);for(let t=0;t<5;t++){const ws=S.ws[S.cur];for(const id of shuffle(tiled(ws))){ws.focus=id;if(neighbor(d)!=null)return}openApp('terminal',{noGroup:true})}}
 function ensureGroup(min=2){ensureTiled(1);const ws=S.ws[S.cur];let sl=curSlot();if(!sl){ws.focus=tiled(ws)[0];sl=curSlot()}sl.grouped=true;
   let g=0;while(sl.wins.length<Math.max(2,min)&&g++<6){openApp(rnd(['terminal','browser','nvim']))}sl=curSlot();
-  if(min>2&&sl){sl.active=(min===sl.wins.length?0:sl.active);ws.focus=sl.wins[sl.active]}}
+  if(sl&&min>=2){sl.active=0;ws.focus=sl.wins[0]}}
 
 /* ---------- overlays ---------- */
 const OV={
@@ -624,6 +626,7 @@ function ovNav(c){
 
 /* ---------- rendering the screen ---------- */
 const winEls=new Map();
+const REDUCED=matchMedia('(prefers-reduced-motion: reduce)').matches;
 function measure(){const r=$('#screen').getBoundingClientRect();const bar=Math.round(Math.max(15,Math.min(26,r.width*.027)));DIM={W:r.width||960,H:r.height||600,bar};
   $('#screen').style.setProperty('--barh',bar+'px')}
 function renderScreen(){
@@ -650,13 +653,13 @@ function renderScreen(){
     if(!el){el=document.createElement('div');el.className='win';holder.appendChild(el);winEls.set(id,el);
       el.classList.add(w.born?'born':slide>0?'slideR':slide<0?'slideL':'born');w.born=false;
       el.addEventListener('animationend',()=>el.classList.remove('born','slideL','slideR'),{once:true});
-      if(!matchMedia('(prefers-reduced-motion: reduce)').matches&&w.app){el.style.transition='none';requestAnimationFrame(()=>{el.style.transition=''})}}
+      if(!REDUCED){el.style.transition='none';requestAnimationFrame(()=>{el.style.transition=''})}}
     const isFloat=p.z>=30&&p.z<40||p.z===45||p.z===62;
     el.classList.toggle('focus',id===f);el.classList.toggle('float',isFloat);el.classList.toggle('transp',!!w.transp);
     Object.assign(el.style,{left:p.x+'px',top:p.y+'px',width:Math.max(8,p.w)+'px',height:Math.max(8,p.h)+'px',zIndex:p.z+(id===f?1:0)});
     const sl=p.slot;const tabs=sl&&sl.grouped?`<div class="tabs">${sl.wins.map((x,i)=>`<span class="${i===sl.active?'on':''}">${esc(APPS[W(x).app].label)}</span>`).join('')}</div>`:'';
     const badges=[w.fake?'⛶ inside':'',w.pseudo?'pseudo':'',S.pinned.includes(id)?'◆ sticky':'',w.full===1?'full screen':w.full===2?'full width':''].filter(Boolean);
-    const sig=tabs+'|'+badges.join(',');
+    const sig=w.app+'|'+tabs+'|'+badges.join(',');
     if(el._sig!==sig){el._sig=sig;el.innerHTML=`${tabs}<div class="wbody">${APPS[w.app].body(w)}${badges.length?`<div class="badges">${badges.map(b=>`<span>${b}</span>`).join('')}</div>`:''}</div>`}}
   $('#wm').hidden=want.size>0;
   // bar
@@ -685,7 +688,7 @@ function cast(combo,label,bad){castLog.unshift({combo,label,bad});castLog.length
   $('#cast').innerHTML=castLog.map(c=>`<span class="ev">${caps(c.combo)}<span class="lbl${c.bad?' bad':''}">${esc(c.label)}</span></span>`).join('');
   freeLog.unshift({combo,label,bad});freeLog.length=Math.min(freeLog.length,14);if(CFG.mode==='free')renderCoach()}
 const freeLog=[];
-const held=new Set();
+const held=new Set();let firedWhileHeld=false;
 function mods(){const m=new Set();for(const c of held){if(c===CFG.standin){m.add('super');continue}const k=MODCODE[c];if(k)m.add(k)}return m}
 function renderMods(){const m=mods();document.querySelectorAll('#mods span').forEach(s=>s.classList.toggle('on',m.has(s.dataset.m)))}
 function prune(e){const drop=(codes,flag)=>{if(!flag)codes.forEach(c=>{if(c!==CFG.standin)held.delete(c)})};
@@ -711,7 +714,7 @@ const L={lesson:null,step:0,note:'',fb:'',opts:null,done:false};
 function clearTimers(){D.timers.forEach(clearTimeout);D.timers=[];clearInterval(D.tick)}
 const askText=a=>typeof a.ask==='function'?a.ask():a.ask;
 function poolActs(){const p=ACTS.filter(a=>a.drill&&a.ask&&CFG.decks.includes(a.deck));return p.length?p:ACTS.filter(a=>a.drill&&a.ask&&a.deck==='basics')}
-function pick(){const pool=poolActs().filter(a=>!D.last.includes(a.id));const ws=pool.map(a=>{const p=P(a.id);return Math.pow(6-p.l,2)+(p.n===0?6:0)});
+function pick(){let pool=poolActs().filter(a=>!D.last.includes(a.id));if(!pool.length)pool=poolActs();const ws=pool.map(a=>{const p=P(a.id);return Math.pow(6-p.l,2)+(p.n===0?6:0)});
   let r=Math.random()*ws.reduce((a,b)=>a+b,0);for(let i=0;i<pool.length;i++){r-=ws[i];if(r<=0)return pool[i]}return pool[pool.length-1]}
 function distractors(keys,deck){const others=ACTS.filter(a=>a.keys[0]!==keys[0]&&!keys.includes(a.keys[0])&&a.keys[0].includes('super'));
   const same=shuffle(others.filter(a=>a.deck===deck)),rest=shuffle(others);const out=[];for(const a of[...same,...rest]){if(out.length>=3)break;if(!out.includes(a.keys[0]))out.push(a.keys[0])}return out}
@@ -725,7 +728,7 @@ function nextPrompt(){clearTimers();if(D.blitz&&D.blitz.done)return;const a=pick
   renderScreen();renderCoach()}
 function success(){const a=D.item,ms=Math.round(performance.now()-D.t0),p=P(a.id);p.n++;
   if(!D.missed){p.ok++;if(!D.revealed||p.l<2)p.l=Math.min(5,p.l+1)}p.ms=p.ms?Math.round(p.ms*.6+ms*.4):ms;saveProg();
-  D.right++;D.streak++;D.tries++;beep(true);D.cool=true;
+  D.right++;D.streak++;D.tries++;beep(true);D.cool=true;D.tip=false;
   if(D.blitz){const B=D.blitz;B.streak++;B.right++;B.mult=Math.min(4,1+Math.floor(B.streak/5));const pts=Math.round((100+Math.max(0,100-ms/30))*B.mult);B.score+=pts;B.times.push([a.id,ms]);D.fb=`+${pts}`;}
   else D.fb=`✓ ${(ms/1000).toFixed(2)}s${D.revealed&&!D.missed?' · with hint':''}`;
   D.fbc='ok';clearTimers();if(D.blitz)D.tick=setInterval(blitzTick,100);renderCoach();
@@ -830,7 +833,7 @@ function renderCoach(){const c=$('#coach');const m=CFG.mode;let h='';
         <p class="sub">Drill mode will keep these in rotation until they stick.</p><div class="row2">${L.lesson+1<LESSONS.length?`<button class="btn pri" data-lesson="${L.lesson+1}">Next: ${LESSONS[L.lesson+1].t}</button>`:''}<button class="btn" data-go="drill">Drill these</button><button class="btn" data-back>All lessons</button></div></div>`}
       else{const st=Ls.steps[L.step];const opts=L.opts||(L.opts=shuffle([st.keys[0],...distractors(st.keys,'basics')]));
         h=`<div class="chead"><span class="eyebrow">Lesson ${L.lesson+1} · ${Ls.t}</span><button class="btn" data-back>All lessons</button></div><div class="cbody">
-        <div class="prog"><span class="blk">${blocks(L.step/Ls.steps.length,16)}</span><span>${L.step+1}/${Ls.steps.length}</span></div>
+        ${hostWarn()}<div class="prog"><span class="blk">${blocks(L.step/Ls.steps.length,16)}</span><span>${L.step+1}/${Ls.steps.length}</span></div>
         ${L.note?`<p class="note">${L.note}</p>`:''}
         <p class="ask">${st.say}</p>
         ${CFG.input==='taps'?optsHTML(st.keys.length?opts:[]):`<div class="keys">${capsAll(st.keys.map(canon))}</div>`}
@@ -838,7 +841,7 @@ function renderCoach(){const c=$('#coach');const m=CFG.mode;let h='';
         <div class="row2"><button class="btn" data-restart>Restart lesson</button></div></div>`}}}
   else if(m==='drill'){const a=D.item;const total=ACTS.filter(x=>x.drill&&x.ask).length;const locked=ACTS.filter(x=>x.drill&&x.ask&&P(x.id).l>=4).length;
     h=`<div class="chead"><span class="eyebrow">Drill</span><span class="small">streak <b>${D.streak}</b> · ${D.tries?Math.round(D.right/D.tries*100):100}% right</span></div><div class="cbody">
-      <div class="chips">${Object.entries(DECKS).map(([k,v])=>`<button class="chip" data-deck="${k}" aria-pressed="${CFG.decks.includes(k)}">${v}</button>`).join('')}</div>
+      ${hostWarn()}<div class="chips">${Object.entries(DECKS).map(([k,v])=>`<button class="chip" data-deck="${k}" aria-pressed="${CFG.decks.includes(k)}">${v}</button>`).join('')}</div>
       ${a?`<p class="ask">${esc(D.ask)}</p>
       ${CFG.input==='taps'?optsHTML(D.opts):`<div class="keys${D.revealed?'':' veil'}">${capsAll(a.keys)}</div>${!D.revealed&&D.hintMs?`<div class="hint"><i style="animation-duration:${D.hintMs}ms"></i></div>`:''}`}
       ${D.tip&&!D.fb?tipHTML():`<p class="fb ${D.fbc}">${esc(D.fb)}</p>`}
@@ -870,6 +873,8 @@ function renderCoach(){const c=$('#coach');const m=CFG.mode;let h='';
         return rows.length?`<div class="kgroup"><h5>${v}</h5>${rows.map(a=>`<div class="krow"><span>${esc(a.label)}${a.os?' <span class="os">*</span>':''}</span>${a.drill&&a.ask?mast(P(a.id).l):'<span></span>'}<span class="kk">${capsAll(a.keys)}</span></div>`).join('')}</div>`:''}).join('')}</div>
       <p class="small"><span class="os">*</span> often grabbed by Windows or macOS. Lock keys helps.</p></div>`}
   c.innerHTML=h;
+  const say=m==='learn'&&L.lesson!=null&&!L.done?(LESSONS[L.lesson].steps[L.step]||{}).say:(m==='drill'||m==='blitz')&&D.item?D.ask:'';
+  if(say&&$('#live').textContent!==say)$('#live').textContent=say;
   if(m==='keys'){const s=$('#ksearch');s.addEventListener('input',e=>{D.q=e.target.value;const pos=e.target.selectionStart;renderCoach();const n=$('#ksearch');n.focus();n.setSelectionRange(pos,pos)})}
 }
 
@@ -892,6 +897,7 @@ $('#coach').addEventListener('click',e=>{const t=e.target.closest('button');if(!
     if(CFG.mode==='drill'){D.last=[];nextPrompt()}else renderCoach();return}
   if(t.hasAttribute('data-skip')){D.streak=0;nextPrompt();return}
   if(t.hasAttribute('data-blitz')){startBlitz();return}
+  if(t.hasAttribute('data-setup')){openSetup(true);return}
   if(t.hasAttribute('data-resetdesk')){fresh();openApp('terminal');renderScreen();return}
   if(t.dataset.opt){const o=t.dataset.opt;
     if(CFG.mode==='learn'&&L.lesson!=null){const st=LESSONS[L.lesson].steps[L.step];if(st.keys.map(canon).includes(o)){if(S.overlay&&['up','down','return','escape'].includes(o)){press(o)}else if(BIND[o])press(o);else after(o,null)}
@@ -899,27 +905,37 @@ $('#coach').addEventListener('click',e=>{const t=e.target.closest('button');if(!
     if(D.item&&!D.cool){if(D.item.keys.includes(o))press(o);else{D.wrongOpt=o;const a=BIND[o];miss(a&&a.label,o)}}}});
 $('#bTheme').addEventListener('click',()=>{const i=THEMES.findIndex(t=>t[0]===CFG.theme);applyTheme(THEMES[(i+1)%THEMES.length][0])});
 $('#bSound').addEventListener('click',()=>{CFG.sound=!CFG.sound;saveCfg();$('#bSound').textContent=CFG.sound?'Sound on':'Sound off'});
-$('#bSetup').addEventListener('click',()=>{const s=$('#setup');s.hidden=!s.hidden;$('#bSetup').classList.toggle('on',!s.hidden)});
+function openSetup(on){const s=$('#setup');s.hidden=!on;$('#bSetup').classList.toggle('on',on);if(on)s.scrollIntoView({block:'nearest'})}
+$('#bSetup').addEventListener('click',()=>openSetup($('#setup').hidden));
 $('#bLock').addEventListener('click',async()=>{const b=$('#bLock');
   if(document.fullscreenElement){try{navigator.keyboard&&navigator.keyboard.unlock()}catch(e){}document.exitFullscreen().catch(()=>{});return}
-  try{await document.documentElement.requestFullscreen();if(navigator.keyboard&&navigator.keyboard.lock){await navigator.keyboard.lock();osd('Keys locked · hold Esc to exit')}else osd('Fullscreen. This browser cannot lock keys; use Chrome, Edge or Brave.');renderScreen()}
+  try{await document.documentElement.requestFullscreen();if(navigator.keyboard&&navigator.keyboard.lock){await navigator.keyboard.lock();KEYLOCK=true;renderCoach();osd('Keys locked · hold Esc to exit')}else osd('Fullscreen. This browser cannot lock keys; use Chrome, Edge or Brave.');renderScreen()}
   catch(e){osd('Fullscreen blocked here. Open the page in its own browser tab.')}});
-document.addEventListener('fullscreenchange',()=>{const on=!!document.fullscreenElement;$('#bLock').textContent=on?'Unlock keys':'Lock keys';$('#bLock').classList.toggle('on',on);setTimeout(()=>{measure();renderScreen()},60)});
+document.addEventListener('fullscreenchange',()=>{const on=!!document.fullscreenElement;if(!on)KEYLOCK=false;$('#bLock').textContent=on?'Unlock keys':'Lock keys';$('#bLock').classList.toggle('on',on);setTimeout(()=>{measure();renderScreen()},60)});
 
-const STANDINS=[[null,'None (real Super)'],['CapsLock','Caps Lock'],['ControlRight','Right Ctrl'],['AltRight','Right Alt'],['capture','Press a key…']];
+const PLAT=(()=>{const p=(navigator.userAgentData&&navigator.userAgentData.platform)||navigator.platform||'';return /mac|iphone|ipad/i.test(p)?'mac':/win/i.test(p)?'win':'linux'})();
+const STANDINS=PLAT==='mac'?[[null,'None (real ⌘)'],['AltRight','Right Option'],['ControlRight','Right Ctrl'],['capture','Press a key…']]
+  :[[null,'None (real Super)'],['CapsLock','Caps Lock'],['ControlRight','Right Ctrl'],['AltRight','Right Alt'],['capture','Press a key…']];
+const PLAT_NOTE={mac:'On a Mac, ⌘ is Super, but ⌘W closes this tab, ⌘Q quits the browser and ⌘Space opens Spotlight. Use Right Option as a stand-in.',
+  win:'On Windows, Win + L locks your PC and Windows keeps Win + Tab, Win + D and friends. Use Caps Lock or Right Ctrl as a stand-in.',
+  linux:'On Omarchy, Hyprland acts on Super combos for real. Use Lock keys, or a stand-in like Caps Lock.'}[PLAT];
+let KEYLOCK=false;
+function hostWarn(){if(CFG.standin||KEYLOCK||PLAT==='linux'||CFG.input==='taps')return'';
+  return `<p class="fb tip">${PLAT==='mac'?'Using real ⌘: ⌘W and ⌘Q can close the browser.':'Using the real Win key: Win + L will lock your PC.'} <button class="btn" data-setup>Pick a stand-in</button></p>`}
 let capturing=false;
-function renderSetup(){$('#standinSeg').innerHTML=STANDINS.map(([c,l])=>`<button class="btn" data-si="${c}" aria-pressed="${capturing?c==='capture':(CFG.standin===c||(!STANDINS.some(s=>s[0]===CFG.standin)&&c==='capture'&&CFG.standin))}">${c==='capture'&&CFG.standin&&!STANDINS.slice(0,4).some(s=>s[0]===CFG.standin)?'Custom: '+CFG.standin:l}</button>`).join('');
-  $('#standinNote').textContent=capturing?'Press the key you want to use as Super…':CFG.standin?`While you hold ${CFG.standin}, it counts as Super. ${CFG.standin==='AltRight'?'On some layouts Right Alt is AltGr and also reports Ctrl.':''}`:'Using the real Super / ⌘ / ⊞ key.';
+function renderSetup(){$('#standinSeg').innerHTML=STANDINS.map(([c,l])=>`<button class="btn" data-si="${c}" aria-pressed="${capturing?c==='capture':(CFG.standin===c||(!STANDINS.some(s=>s[0]===CFG.standin)&&c==='capture'&&CFG.standin))}">${c==='capture'&&CFG.standin&&!STANDINS.slice(0,4).some(s=>s[0]===CFG.standin)?'Custom: '+esc(CFG.standin):l}</button>`).join('');
+  $('#platNote').textContent=PLAT_NOTE;
+  $('#standinNote').textContent=capturing?'Press the key you want to use as Super…':CFG.standin?`While you hold ${(STANDINS.find(x=>x[0]===CFG.standin)||[0,CFG.standin])[1]}, it counts as Super.${CFG.standin==='AltRight'&&PLAT!=='mac'?' On some layouts Right Alt is AltGr and also reports Ctrl.':''}`:'Using the real Super key.';
   document.querySelectorAll('#inputSeg .btn').forEach(b=>b.setAttribute('aria-pressed',b.dataset.input===CFG.input))}
 $('#standinSeg').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const v=b.dataset.si;
-  if(v==='capture'){capturing=true}else{capturing=false;CFG.standin=v==='null'?null:v;saveCfg()}held.clear();renderSetup();renderMods()});
+  if(v==='capture'){capturing=true}else{capturing=false;CFG.standin=v==='null'?null:v;saveCfg()}held.clear();renderSetup();renderMods();renderCoach()});
 $('#inputSeg').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;CFG.input=b.dataset.input;saveCfg();renderSetup();renderCoach()});
 let resetArm=false;
 $('#bReset').addEventListener('click',()=>{const b=$('#bReset');if(!resetArm){resetArm=true;b.textContent='Click again to erase';setTimeout(()=>{resetArm=false;b.textContent='Reset progress'},3000);return}
   PROG={};saveProg();CFG.done=[];CFG.best=0;saveCfg();resetArm=false;b.textContent='Progress erased';renderCoach()});
 
 window.addEventListener('keydown',e=>{
-  if(capturing){e.preventDefault();capturing=false;CFG.standin=e.code;saveCfg();held.clear();renderSetup();return}
+  if(capturing){e.preventDefault();capturing=false;CFG.standin=e.code||null;saveCfg();held.clear();renderSetup();renderCoach();return}
   const inField=e.target&&e.target.closest&&e.target.closest('input,textarea');
   const code=e.code;
   if(MODCODE[code]||code===CFG.standin){held.add(code);renderMods();if(code===CFG.standin||MODCODE[code]==='super')e.preventDefault();return}
@@ -928,23 +944,28 @@ window.addEventListener('keydown',e=>{
   const key=keyName(e);if(!key)return;
   const combo=[...MODS.filter(x=>m.has(x)),key].join('+');
   if(e.repeat){if(m.has('super')||BIND[combo])e.preventDefault();return}
-  if(CFG.input==='taps'&&!inField){CFG.input='keys';saveCfg();renderSetup()}
+  if(CFG.input==='taps'&&m.has('super')){CFG.input='keys';saveCfg();renderSetup();renderCoach()}
   const handled=press(combo,'key');
+  if(handled)firedWhileHeld=true;
+  if(m.has('super'))usedSuper=true;
   if(handled||m.has('super'))e.preventDefault();
 },true);
-window.addEventListener('keyup',e=>{held.delete(e.code);if(e.code===CFG.standin)e.preventDefault();prune(e);renderMods()},true);
+window.addEventListener('keyup',e=>{held.delete(e.code);if(e.code===CFG.standin||(firedWhileHeld&&MODCODE[e.code]))e.preventDefault();prune(e);if(!mods().size)firedWhileHeld=false;renderMods()},true);
 window.addEventListener('blur',()=>{held.clear();renderMods()});
+let usedSuper=false;
+window.addEventListener('beforeunload',e=>{if(PLAT==='mac'&&!CFG.standin&&usedSuper){e.preventDefault();e.returnValue=''}});
 document.addEventListener('visibilitychange',()=>{held.clear();renderMods()});
 new ResizeObserver(()=>{measure();renderScreen()}).observe($('#screen'));
 setInterval(()=>{if(!S.overlay||S.overlay==='lock')renderScreen()},30000);
 
 /* ---------- boot ---------- */
-applyTheme(CFG.theme);$('#bSound').textContent=CFG.sound?'Sound on':'Sound off';renderSetup();
+applyTheme(CFG.theme);
+if(!CFG.seenSetup){CFG.seenSetup=true;saveCfg();if(!matchMedia('(pointer:coarse)').matches)openSetup(true)}$('#bSound').textContent=CFG.sound?'Sound on':'Sound off';renderSetup();
 measure();
 openApp('terminal');openApp('browser');openApp('btop');
 notify('Welcome to Omadojo','Hold Super and press K for the cheat sheet.',9000);
 if(CFG.mode==='drill')setMode('drill');else{if(CFG.mode==='blitz')D.blitz=null;renderScreen();renderCoach()}
-window.__od={S:()=>S,press,ACTS,BIND,setMode,startLesson,D,L};
+if(location.hash==='#debug')window.__od={S:()=>S,press,ACTS,BIND,setMode,startLesson,D,L};
 })();
 </script>
 </body>
