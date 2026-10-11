@@ -42,27 +42,31 @@ const toPw = combo => combo.split('+').map(k => KEY[k] || (/^\d$/.test(k) ? 'Dig
   for (const deck of ['groups', 'apps', 'system']) await page.click(`[data-deck="${deck}"]`);
   let ok = 0;
   for (let i = 0; i < 40; i++) {
-    await page.waitForTimeout(700);
-    const combo = await page.evaluate(() => __od.D.item && __od.D.item.keys[0]);
-    if (!combo) continue;
+    // Wait for the next prompt rather than a fixed delay; the engine moves on 650 ms after a hit.
+    const ready = await page.waitForFunction(() => __od.D.item && !__od.D.cool, null, { timeout: 5000 }).catch(() => null);
+    if (!ready) { errors.push('no drill prompt after answer ' + i); break; }
+    const [combo, right] = await page.evaluate(() => [__od.D.item.keys[0], __od.D.right]);
     await page.keyboard.press(toPw(combo));
-    await page.waitForTimeout(40);
-    if (await page.evaluate(() => __od.D.cool)) ok++;
+    // Count the hit itself; D.cool resets as soon as the next prompt appears.
+    if (await page.evaluate(r => __od.D.right > r, right)) ok++;
     else errors.push('drill prompt not accepted: ' + combo);
   }
   console.log(`drill: ${ok}/40`);
 
-  // Stand-in Super: with Caps Lock picked in Key setup, Caps Lock + Return opens a terminal.
+  // Stand-in Super: for every stand-in the platform offers, holding it + Return opens a terminal.
   await page.click('[data-mode="free"]');
   if (await page.isHidden('#setup')) await page.click('#bSetup');
-  await page.click('[data-si="CapsLock"]');
-  const before = await page.evaluate(() => Object.keys(__od.S().wins).length);
-  await page.keyboard.down('CapsLock');
-  await page.keyboard.press('Enter');
-  await page.keyboard.up('CapsLock');
-  const opened = await page.evaluate(() => Object.keys(__od.S().wins).length) - before;
-  console.log(`stand-in super: ${opened === 1 ? 'ok' : 'FAILED'}`);
-  if (opened !== 1) errors.push('Caps Lock stand-in + Return did not open a terminal');
+  const standins = await page.$$eval('[data-si]', bs => bs.map(b => b.dataset.si).filter(c => c !== 'null' && c !== 'capture'));
+  for (const code of standins) {
+    await page.click(`[data-si="${code}"]`);
+    const before = await page.evaluate(() => Object.keys(__od.S().wins).length);
+    await page.keyboard.down(code);
+    await page.keyboard.press('Enter');
+    await page.keyboard.up(code);
+    const opened = await page.evaluate(() => Object.keys(__od.S().wins).length) - before;
+    console.log(`stand-in ${code}: ${opened === 1 ? 'ok' : 'FAILED'}`);
+    if (opened !== 1) errors.push(`${code} stand-in + Return did not open a terminal`);
+  }
 
   // Phone width must not scroll sideways.
   const phone = await browser.newPage({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
