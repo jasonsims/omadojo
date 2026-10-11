@@ -5,8 +5,11 @@
   "description": "Browser trainer for Omarchy keyboard shortcuts",
   "scripts": {
     "dev": "node scripts/serve.js",
-    "test": "node --test 'tests/unit/*.test.js'",
+    "test": "node --test \"tests/unit/*.test.js\"",
     "smoke": "node tests/smoke.js"
+  },
+  "engines": {
+    "node": ">=22"
   },
   "devDependencies": {
     "playwright": "1.56.1"

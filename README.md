@@ -31,6 +31,8 @@ Any static server works too (`python -m http.server 8000`).
 
 ## Test it
 
+The tests need Node 22 or later.
+
 ```sh
 npm install
 npx playwright install chromium

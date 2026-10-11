@@ -2,7 +2,7 @@
 // Usage: node scripts/serve.js [port]   (default 8000, or PORT)
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
-import { extname, join, normalize, resolve, sep } from 'node:path';
+import { extname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(fileURLToPath(import.meta.url), '../..');
@@ -12,8 +12,8 @@ const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/cs
 export function serve(port = 0) {
   const server = createServer(async (req, res) => {
     try {
-      const path = normalize(decodeURIComponent(new URL(req.url, 'http://x').pathname));
-      const file = join(ROOT, path.endsWith('/') ? path + 'index.html' : path);
+      const url = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+      const file = join(ROOT, url.endsWith('/') ? url + 'index.html' : url);
       if (!file.startsWith(ROOT + sep)) { res.writeHead(403).end(); return; }
       const body = await readFile(file);
       res.writeHead(200, { 'content-type': TYPES[extname(file)] || 'application/octet-stream', 'cache-control': 'no-store' });
