@@ -1,13 +1,21 @@
 import { $, esc } from '../lib/util.js';
+import { caps } from '../lib/keys.js';
 import { CFG } from '../config.js';
-import { host, PLAT, PLAT_NOTE, STANDINS } from '../input/host.js';
+import { BIND } from '../actions/index.js';
+import { CONFLICTS, host, plat, platName } from '../input/host.js';
 
-// The Key setup drawer: stand-in Super key and keyboard vs tapping.
+// The Key setup drawer: which OS you practise on and what can't be trained there, plus keyboard vs tapping.
 function openSetup(on){const s=$('#setup');s.hidden=!on;$('#bSetup').classList.toggle('on',on);if(on)s.scrollIntoView({block:'nearest'})}
 
-function renderSetup(){$('#standinSeg').innerHTML=STANDINS.map(([c,l])=>`<button class="btn" data-si="${c}" aria-pressed="${host.capturing?c==='capture':(CFG.standin===c||(!STANDINS.some(s=>s[0]===CFG.standin)&&c==='capture'&&CFG.standin))}">${c==='capture'&&CFG.standin&&!STANDINS.slice(0,4).some(s=>s[0]===CFG.standin)?'Custom: '+esc(CFG.standin):l}</button>`).join('');
-  $('#platNote').textContent=PLAT_NOTE;
-  $('#standinNote').textContent=host.capturing?'Press the key you want to use as Super…':CFG.standin?`While you hold ${(STANDINS.find(x=>x[0]===CFG.standin)||[0,CFG.standin])[1]}, it counts as Super.${CFG.standin==='AltRight'&&PLAT!=='mac'?' On some layouts Right Alt is AltGr and also reports Ctrl.':''}`:'Using the real Super key.';
+function renderSetup(){
+  document.querySelectorAll('#platSeg .btn').forEach(b=>b.setAttribute('aria-pressed',b.dataset.plat===plat()));
+  const all=Object.entries(CONFLICTS[plat()]).filter(([k])=>BIND[k]).map(([k,c])=>({k,c,a:BIND[k]}));
+  const live=all.filter(x=>!(x.c.lock&&host.keylock)).sort((x,y)=>(y.c.d||0)-(x.c.d||0));
+  $('#platSum').textContent=!all.length
+    ?'Nothing is blocked by default. On Omarchy itself, Hyprland acts on every Super combo for real, so use Lock keys or practise on the real desktop.'
+    :`${live.length} shortcut${live.length===1?'':'s'} can't be trained on ${platName()}${host.keylock?' even with keys locked':''}. They're left out of Drill and Blitz, and lessons offer "Do it for me".`
+      +(plat()==='win'&&!host.keylock?' Lock keys gets most of them back, except Win + L and Ctrl + Alt + Delete.':'');
+  $('#blist').innerHTML=live.map(x=>`<div><span class="kk">${caps(x.k)}</span><span><span>${esc(x.a.label)}</span><span class="why${x.c.d?' danger':''}">${esc(x.c.why)}</span></span></div>`).join('');
   document.querySelectorAll('#inputSeg .btn').forEach(b=>b.setAttribute('aria-pressed',b.dataset.input===CFG.input))}
 
 export { openSetup, renderSetup };
