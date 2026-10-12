@@ -4,12 +4,19 @@ import { CFG, P } from '../config.js';
 import { ACTS, DECKS } from '../actions/index.js';
 import { LESSONS } from '../coach/lessons.js';
 import { askText, D, distractors, freeLog, L } from '../coach/state.js';
-import { hostWarn } from '../input/host.js';
+import { availKeys, blocked, platName, trainable } from '../input/host.js';
 
 // The coach panel for every mode, and the keycast strip under the screen.
 const blocks=(f,n=20)=>'█'.repeat(Math.round(f*n))+'░'.repeat(n-Math.round(f*n));
 const mast=l=>`<span class="mast" title="Level ${l} of 5">${[1,2,3,4,5].map(i=>`<i class="${l>=i?'on':''}">${'▁▂▃▅▇'[i-1]}</i>`).join('')}</span>`;
-const tipHTML=()=>`<p class="fb tip">Super didn't reach the page. Your OS grabbed it. Try <b>Lock keys</b> or pick a stand-in in <b>Key setup</b>.</p>`;
+const tipHTML=()=>`<p class="fb tip">Super didn't reach the page. Your OS grabbed it. Try <b>Lock keys</b>, or check <b>Key setup</b> for what can't be trained here.</p>`;
+// A Learn step's keys, or a "Do it for me" box when the user's OS takes every key the step accepts.
+function stepKeysHTML(st){const ks=st.keys.map(canon),av=ks.filter(k=>!blocked(k));if(av.length)return `<div class="keys">${capsAll(av)}</div>`;
+  const b=blocked(ks[0]);return `<div class="blocked"><div class="keys">${capsAll(ks)}</div><p class="os${b.danger?' danger':''}">Can't train here: ${esc(b.why)}.</p><div><button class="btn pri" data-auto>Do it for me</button></div></div>`}
+// One cheat-sheet row. Shortcuts the user's OS takes are dimmed and say what happens instead.
+function keyRow(a){const bi=a.keys.findIndex(k=>blocked(k)),b=bi<0?null:blocked(a.keys[bi]),off=!trainable(a),cls=b&&b.danger?' danger':'';
+  return `<div class="krow${off?' off':''}"><span>${esc(a.label)}</span>${off?`<span class="os${cls}">can't train here</span>`:a.drill&&a.ask?mast(P(a.id).l):'<span></span>'}`
+    +`<span class="kk">${capsAll(a.keys)}</span>${b?`<span class="os why${cls}">${esc(plain(a.keys[bi]))}: ${esc(b.why)}</span>`:''}</div>`}
 function optsHTML(opts,correct){return `<div class="opts">${opts.map(o=>`<button class="opt${D.wrongOpt===o?' wrong':''}" data-opt="${o}">${caps(o)}</button>`).join('')}</div>`}
 function renderCoach(){const c=$('#coach');const m=CFG.mode;let h='';
   document.querySelectorAll('#modes button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.mode===m));
@@ -22,21 +29,22 @@ function renderCoach(){const c=$('#coach');const m=CFG.mode;let h='';
         <p class="sub">Drill mode will keep these in rotation until they stick.</p><div class="row2">${L.lesson+1<LESSONS.length?`<button class="btn pri" data-lesson="${L.lesson+1}">Next: ${LESSONS[L.lesson+1].t}</button>`:''}<button class="btn" data-go="drill">Drill these</button><button class="btn" data-back>All lessons</button></div></div>`}
       else{const st=Ls.steps[L.step];const opts=L.opts||(L.opts=shuffle([st.keys[0],...distractors(st.keys,'basics')]));
         h=`<div class="chead"><span class="eyebrow">Lesson ${L.lesson+1} · ${Ls.t}</span><button class="btn" data-back>All lessons</button></div><div class="cbody">
-        ${hostWarn()}<div class="prog"><span class="blk">${blocks(L.step/Ls.steps.length,16)}</span><span>${L.step+1}/${Ls.steps.length}</span></div>
+        <div class="prog"><span class="blk">${blocks(L.step/Ls.steps.length,16)}</span><span>${L.step+1}/${Ls.steps.length}</span></div>
         ${L.note?`<p class="note">${L.note}</p>`:''}
         <p class="ask">${st.say}</p>
-        ${CFG.input==='taps'?optsHTML(st.keys.length?opts:[]):`<div class="keys">${capsAll(st.keys.map(canon))}</div>`}
+        ${CFG.input==='taps'?optsHTML(st.keys.length?opts:[]):stepKeysHTML(st)}
         ${L.fb==='tip'?tipHTML():`<p class="fb bad">${esc(L.fb||'')}</p>`}
         <div class="row2"><button class="btn" data-restart>Restart lesson</button></div></div>`}}}
-  else if(m==='drill'){const a=D.item;const total=ACTS.filter(x=>x.drill&&x.ask).length;const locked=ACTS.filter(x=>x.drill&&x.ask&&P(x.id).l>=4).length;
+  else if(m==='drill'){const a=D.item;const drills=ACTS.filter(x=>x.drill&&x.ask),pool=drills.filter(trainable);const total=pool.length;const locked=pool.filter(x=>P(x.id).l>=4).length;
+    const hidden=drills.filter(x=>!trainable(x)&&CFG.decks.includes(x.deck)).length;
     h=`<div class="chead"><span class="eyebrow">Drill</span><span class="small">streak <b>${D.streak}</b> · ${D.tries?Math.round(D.right/D.tries*100):100}% right</span></div><div class="cbody">
-      ${hostWarn()}<div class="chips">${Object.entries(DECKS).map(([k,v])=>`<button class="chip" data-deck="${k}" aria-pressed="${CFG.decks.includes(k)}">${v}</button>`).join('')}</div>
+      <div class="chips">${Object.entries(DECKS).map(([k,v])=>`<button class="chip" data-deck="${k}" aria-pressed="${CFG.decks.includes(k)}">${v}</button>`).join('')}</div>
       ${a?`<p class="ask">${esc(D.ask)}</p>
-      ${CFG.input==='taps'?optsHTML(D.opts):`<div class="keys${D.revealed?'':' veil'}">${capsAll(a.keys)}</div>${!D.revealed&&D.hintMs?`<div class="hint"><i style="animation-duration:${D.hintMs}ms"></i></div>`:''}`}
+      ${CFG.input==='taps'?optsHTML(D.opts):`<div class="keys${D.revealed?'':' veil'}">${capsAll(availKeys(a))}</div>${!D.revealed&&D.hintMs?`<div class="hint"><i style="animation-duration:${D.hintMs}ms"></i></div>`:''}`}
       ${D.tip&&!D.fb?tipHTML():`<p class="fb ${D.fbc}">${esc(D.fb)}</p>`}
-      ${a.os?`<p class="os">${a.os}</p>`:''}
       <div class="row2"><span class="small">Level</span>${mast(P(a.id).l)}<button class="btn" data-skip style="margin-left:auto">Skip</button></div>`:''}
       <div class="meter"><span>Locked in ${locked} of ${total} shortcuts</span><span class="blk">${blocks(locked/total,24)}</span></div>
+      ${hidden?`<p class="small">${hidden} in these decks can't be trained on ${platName()} and are left out. <button class="chip" data-setup>See which</button></p>`:''}
       <p class="small">Keys stay hidden once you know them. Get one wrong and it drops a level and comes back sooner.</p></div>`}
   else if(m==='blitz'){const B=D.blitz;
     if(!B||B.done){const res=B&&B.done;let slow='';
@@ -49,7 +57,7 @@ function renderCoach(){const c=$('#coach');const m=CFG.mode;let h='';
       <div class="chips">${Object.entries(DECKS).map(([k,v])=>`<button class="chip" data-deck="${k}" aria-pressed="${CFG.decks.includes(k)}">${v}</button>`).join('')}</div></div>`}
     else{const a=D.item;h=`<div class="chead"><span class="eyebrow">Blitz</span><span class="mult">×${B.mult}</span></div><div class="cbody">
       <div class="blitzhead"><div><span class="small">Score</span><div class="big">${B.score}</div></div><div style="text-align:right"><span class="small">Left</span><div class="big" id="bclock">${Math.max(0,(B.end-performance.now())/1000).toFixed(1)}</div></div></div>
-      ${a?`<p class="ask">${esc(D.ask)}</p>${CFG.input==='taps'?optsHTML(D.opts):`<div class="keys${D.revealed?'':' veil'}">${capsAll(a.keys)}</div>${!D.revealed?`<div class="hint"><i style="animation-duration:${D.hintMs}ms"></i></div>`:''}`}`:''}
+      ${a?`<p class="ask">${esc(D.ask)}</p>${CFG.input==='taps'?optsHTML(D.opts):`<div class="keys${D.revealed?'':' veil'}">${capsAll(availKeys(a))}</div>${!D.revealed?`<div class="hint"><i style="animation-duration:${D.hintMs}ms"></i></div>`:''}`}`:''}
       <p class="fb ${D.fbc}">${esc(D.fb)}</p></div>`}}
   else if(m==='free'){h=`<div class="chead"><span class="eyebrow">Free play</span><button class="btn" data-resetdesk>Reset desktop</button></div><div class="cbody">
       <p class="sub">No prompts. Drive the desktop however you like and watch what each shortcut does. Super + K shows the cheat sheet inside the screen.</p>
@@ -59,8 +67,8 @@ function renderCoach(){const c=$('#coach');const m=CFG.mode;let h='';
     h=`<div class="chead"><span class="eyebrow">Keys</span><span class="small">Super + K in Omarchy</span></div><div class="cbody">
       <input class="ksearch" id="ksearch" placeholder="Filter: workspace, float, theme…" value="${esc(D.q||'')}" aria-label="Filter shortcuts">
       <div class="klist">${Object.entries(DECKS).map(([k,v])=>{const rows=ACTS.filter(a=>a.deck===k&&(!q||a.label.toLowerCase().includes(q)||plain(a.keys[0]).toLowerCase().includes(q)||(a.ask&&askText(a).toLowerCase().includes(q))));
-        return rows.length?`<div class="kgroup"><h5>${v}</h5>${rows.map(a=>`<div class="krow"><span>${esc(a.label)}${a.os?' <span class="os">*</span>':''}</span>${a.drill&&a.ask?mast(P(a.id).l):'<span></span>'}<span class="kk">${capsAll(a.keys)}</span></div>`).join('')}</div>`:''}).join('')}</div>
-      <p class="small"><span class="os">*</span> often grabbed by Windows or macOS. Lock keys helps.</p></div>`}
+        return rows.length?`<div class="kgroup"><h5>${v}</h5>${rows.map(keyRow).join('')}</div>`:''}).join('')}</div>
+      <p class="small">Practising on ${platName()}. Change it in Key setup.</p></div>`}
   c.innerHTML=h;
   const say=m==='learn'&&L.lesson!=null&&!L.done?(LESSONS[L.lesson].steps[L.step]||{}).say:(m==='drill'||m==='blitz')&&D.item?D.ask:'';
   if(say&&$('#live').textContent!==say)$('#live').textContent=say;

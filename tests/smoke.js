@@ -1,4 +1,4 @@
-// Smoke test: plays every lesson and a batch of drill prompts with real key events.
+// Smoke test: plays every lesson and a batch of drill prompts with real key events on Linux, Mac and Windows.
 // Usage: npm install && npx playwright install chromium && npm run smoke
 // Set CHROMIUM_PATH to use an existing Chromium binary instead.
 import { chromium } from 'playwright';
@@ -22,51 +22,51 @@ const toPw = combo => combo.split('+').map(k => KEY[k] || (/^\d$/.test(k) ? 'Dig
   await page.reload();
   await page.waitForTimeout(300);
 
-  // Lessons: press the first listed key for every step and expect the lesson to finish.
-  const lessons = await page.evaluate(() => __od.lessons);
-  for (let i = 0; i < lessons; i++) {
-    await page.evaluate(i => __od.startLesson(i), i);
-    for (let s = 0; s < 40; s++) {
-      const combo = await page.evaluate(() => __od.L.done ? null : __od.lessonKey());
-      if (!combo) break;
-      await page.keyboard.press(toPw(combo));
-      await page.waitForTimeout(60);
+  // Every lesson and 40 drill prompts on each platform. A lesson step the OS would take must offer
+  // "Do it for me"; a drill must never ask for a shortcut that can't reach the page.
+  async function run(plat) {
+    await page.evaluate(plat => localStorage.setItem('omadojo.cfg', JSON.stringify({ plat, seenSetup: true })), plat);
+    await page.reload();
+    await page.waitForFunction(() => window.__od);
+    const lessons = await page.evaluate(() => __od.lessons);
+    let autos = 0;
+    for (let i = 0; i < lessons; i++) {
+      await page.evaluate(i => __od.startLesson(i), i);
+      for (let s = 0; s < 40; s++) {
+        const combo = await page.evaluate(() => __od.L.done ? null : __od.lessonKey());
+        if (!combo) break;
+        if (combo === 'blocked') { await page.click('[data-auto]'); autos++; }
+        else await page.keyboard.press(toPw(combo));
+        await page.waitForTimeout(60);
+      }
+      if (!await page.evaluate(() => __od.L.done)) errors.push(`${plat}: lesson ${i + 1} did not finish`);
     }
-    const done = await page.evaluate(() => __od.L.done);
-    console.log(`lesson ${i + 1}: ${done ? 'ok' : 'FAILED'}`);
-    if (!done) errors.push(`lesson ${i + 1} did not finish`);
-  }
 
-  // Drill: answer 40 prompts correctly across every deck.
-  await page.click('[data-mode="drill"]');
-  for (const deck of ['groups', 'apps', 'system']) await page.click(`[data-deck="${deck}"]`);
-  let ok = 0;
-  for (let i = 0; i < 40; i++) {
-    // Wait for the next prompt rather than a fixed delay; the engine moves on 650 ms after a hit.
-    const ready = await page.waitForFunction(() => __od.D.item && !__od.D.cool, null, { timeout: 5000 }).catch(() => null);
-    if (!ready) { errors.push('no drill prompt after answer ' + i); break; }
-    const [combo, right] = await page.evaluate(() => [__od.D.item.keys[0], __od.D.right]);
-    await page.keyboard.press(toPw(combo));
-    // Count the hit itself; D.cool resets as soon as the next prompt appears.
-    if (await page.evaluate(r => __od.D.right > r, right)) ok++;
-    else errors.push('drill prompt not accepted: ' + combo);
-  }
-  console.log(`drill: ${ok}/40`);
+    await page.click('[data-mode="drill"]');
+    for (const deck of ['groups', 'apps', 'system']) {
+      if (await page.getAttribute(`[data-deck="${deck}"]`, 'aria-pressed') !== 'true') await page.click(`[data-deck="${deck}"]`);
+    }
+    let ok = 0;
+    for (let i = 0; i < 40; i++) {
+      // Wait for the next prompt rather than a fixed delay; the engine moves on 650 ms after a hit.
+      const ready = await page.waitForFunction(() => __od.D.item && !__od.D.cool, null, { timeout: 5000 }).catch(() => null);
+      if (!ready) { errors.push(`${plat}: no drill prompt after answer ${i}`); break; }
+      const [keys, avail, right] = await page.evaluate(() => [__od.D.item.keys, __od.D.item.keys.filter(k => !__od.blocked(k)), __od.D.right]);
+      if (!avail.length) { errors.push(`${plat}: drill asked for ${keys[0]}, which can't reach the page`); break; }
+      await page.keyboard.press(toPw(avail[0]));
+      // Count the hit itself; D.cool resets as soon as the next prompt appears.
+      if (await page.evaluate(r => __od.D.right > r, right)) ok++;
+      else errors.push(`${plat}: drill prompt not accepted: ${avail[0]}`);
+    }
 
-  // Stand-in Super: for every stand-in the platform offers, holding it + Return opens a terminal.
-  await page.click('[data-mode="free"]');
-  if (await page.isHidden('#setup')) await page.click('#bSetup');
-  const standins = await page.$$eval('[data-si]', bs => bs.map(b => b.dataset.si).filter(c => c !== 'null' && c !== 'capture'));
-  for (const code of standins) {
-    await page.click(`[data-si="${code}"]`);
-    const before = await page.evaluate(() => Object.keys(__od.S().wins).length);
-    await page.keyboard.down(code);
-    await page.keyboard.press('Enter');
-    await page.keyboard.up(code);
-    const opened = await page.evaluate(() => Object.keys(__od.S().wins).length) - before;
-    console.log(`stand-in ${code}: ${opened === 1 ? 'ok' : 'FAILED'}`);
-    if (opened !== 1) errors.push(`${code} stand-in + Return did not open a terminal`);
+    // Every mode and the Key setup drawer must render on this platform.
+    for (const mode of ['keys', 'free', 'blitz', 'learn']) await page.click(`[data-mode="${mode}"]`);
+    await page.click('#bSetup');
+    const listed = await page.$$eval('#blist > div', d => d.length);
+    await page.click('#bSetup');
+    console.log(`${plat}: ${lessons} lessons (${autos} steps done for you), drill ${ok}/40, ${listed} can't-train shortcuts listed`);
   }
+  for (const plat of ['linux', 'mac', 'win']) await run(plat);
 
   // Phone width must not scroll sideways.
   const phone = await browser.newPage({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });

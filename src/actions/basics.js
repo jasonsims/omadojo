@@ -1,5 +1,5 @@
 import { closeWin, focusId, openApp, S } from '../model/desktop.js';
-import { act, openOv, OS_NOTE, toggleOv } from './act.js';
+import { act, openOv, toggleOv } from './act.js';
 import { ensureTiled } from './ensure.js';
 
 // Essentials (Omarchy manual: Hotkeys).
@@ -12,4 +12,4 @@ act('sysmenu','basics',['super+escape'],'System menu',toggleOv('system'),{ask:'O
 act('keys','basics',['super+k'],'Keybindings',toggleOv('keys'),{ask:'Show the keybindings cheat sheet'});
 act('lock','basics',['super+ctrl+l'],'Lock screen',openOv('lock'),{ask:'Lock the computer'});
 act('files','basics',['super+shift+f'],'File manager',()=>openApp('files'),{ask:'Open the file manager'});
-act('closeall','basics',['ctrl+alt+delete'],'Close all windows',()=>{[...Object.keys(S.wins)].forEach(id=>closeWin(+id))},{ask:'Close every window at once',os:OS_NOTE,drill:false});
+act('closeall','basics',['ctrl+alt+delete'],'Close all windows',()=>{[...Object.keys(S.wins)].forEach(id=>closeWin(+id))},{ask:'Close every window at once',drill:false});

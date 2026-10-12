@@ -31,14 +31,14 @@
     <div>
       <h3>Is Super reaching the page?</h3>
       <p>Hold your Super key (⊞ Windows, ⌘ Mac). The <b>SUPER</b> light under the screen should glow. Then press Super + Return and a terminal should open in the fake desktop.</p>
-      <p class="fb tip" id="platNote"></p>
-      <p>Your real OS often grabs Super combos first. On Omarchy, Hyprland will open a real terminal instead. Fix it with <b>Lock keys</b>: Chromium-based browsers go fullscreen and ask the compositor to pass shortcuts through (hold Esc to leave).</p>
+      <p>Your OS grabs some Super combos before the page sees them. <b>Lock keys</b> puts the page in fullscreen and asks the browser to pass shortcuts through (Chrome, Edge or Brave; hold Esc to leave). It helps most on Windows and Linux.</p>
     </div>
     <div>
-      <h3>Or pick a stand-in key</h3>
-      <p id="standinIntro">The stand-in acts as Super while held.</p>
-      <div class="seg" id="standinSeg"></div>
-      <p class="small" id="standinNote" style="margin-top:8px"></p>
+      <h3>Can't train here</h3>
+      <p>Practising on</p>
+      <div class="seg" id="platSeg"><button class="btn" data-plat="mac">Mac</button><button class="btn" data-plat="win">Windows</button><button class="btn" data-plat="linux">Linux</button></div>
+      <p class="small" id="platSum" style="margin-top:8px"></p>
+      <div class="blist" id="blist"></div>
     </div>
     <div>
       <h3>Answer with</h3>

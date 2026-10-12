@@ -17,7 +17,7 @@ Phones get a tap-to-answer recall quiz instead of key input.
 Operating systems usually grab Super combos before a web page sees them (on Omarchy, Hyprland acts on them for real).
 
 - **Lock keys** puts the page in fullscreen and calls `navigator.keyboard.lock()`. In Chromium-based browsers on Wayland this uses the keyboard-shortcuts-inhibit protocol, which Hyprland supports. Hold Esc to leave.
-- **Key setup → stand-in key** makes Caps Lock, Right Ctrl, or any key you pick act as Super while held.
+- **Can't train here.** Some shortcuts never reach a web page with the real Super key: ⌘Q quits the browser on a Mac, and Win + L locks a Windows PC. Omadojo detects your OS, leaves those out of Drill and Blitz, flags them in Keys, and lessons offer "Do it for me" for those steps. Key setup lists them and lets you change the detected platform. There's no stand-in key on purpose: the point is muscle memory for the real one.
 
 ## Run it
 
@@ -37,7 +37,7 @@ The tests need Node 22 or later.
 npm install
 npx playwright install chromium
 npm test           # unit tests: layout geometry and every drill prompt
-npm run smoke      # browser smoke test: lessons, drills, stand-in key, phone width
+npm run smoke      # browser smoke test: lessons and drills on Linux, Mac and Windows, phone width
 ```
 
 ## Deploy it

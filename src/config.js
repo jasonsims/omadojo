@@ -1,8 +1,9 @@
 import { store } from './lib/util.js';
 
 // User settings (omadojo.cfg) and per-shortcut mastery (omadojo.prog) in localStorage.
-const CFG=Object.assign({theme:'auto',sound:true,standin:null,input:null,decks:['basics','tiling','workspaces'],mode:'learn',wp:0,best:0,done:[]},store.get('cfg',{}));
+const CFG=Object.assign({theme:'auto',sound:true,plat:null,input:null,decks:['basics','tiling','workspaces'],mode:'learn',wp:0,best:0,done:[]},store.get('cfg',{}));
 if(!CFG.input)CFG.input=typeof matchMedia==='function'&&matchMedia('(pointer:coarse)').matches?'taps':'keys';
+delete CFG.standin; // the stand-in Super key was removed; drop the old setting
 const saveCfg=()=>store.set('cfg',CFG);
 const PROG=store.get('prog',{});
 const P=id=>PROG[id]||(PROG[id]={l:0,n:0,ok:0,ms:0});

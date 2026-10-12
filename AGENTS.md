@@ -21,7 +21,7 @@ If you add or change a binding, cite which manual table it came from in your com
 
 ## Architecture
 
-The code is ES modules in four layers plus the view. Imports point one way, `lib → config → model → actions → coach state → input → view → coach engine → main`, and the graph has no cycles. Keep it that way.
+The code is ES modules in four layers plus the view. Imports point one way, `lib → config → model → actions → input → coach state → view → coach engine → main`, and the graph has no cycles. Keep it that way.
 
 ```
 src/
@@ -40,7 +40,7 @@ src/
   coach/state.js       D, L, pick(), distractors()
   coach/lessons.js     LESSONS
   coach/engine.js      press(), after(), nextPrompt(), setMode(), startLesson()
-  input/host.js        platform, stand-in choices, host.keylock, hostWarn()
+  input/host.js        platform, host.keylock, CONFLICTS (can't-train-here table), blocked(), trainable()
   input/modifiers.js   held, mods(), prune()
   view/*.js            screen, coach, setup, theme, sound
 styles/
@@ -62,15 +62,17 @@ styles/
    - The aspect ratio of the work area comes from the view through `setAspect()`.
 
 3. **Actions and keys** (`src/actions/`, `src/lib/keys.js`, `src/input/`)
-   - Every shortcut is one `act(id, deck, keys, label, run, opts)` call. `opts` can include `ask` (drill prompt, string or function), `ensure` (sets up preconditions before a drill prompt), `os` (warning that the host OS may grab it) and `drill:false`.
+   - Every shortcut is one `act(id, deck, keys, label, run, opts)` call. `opts` can include `ask` (drill prompt, string or function), `ensure` (sets up preconditions before a drill prompt) and `drill:false`.
    - That single table drives key handling (`BIND`), the Keys cheat sheet, the drill pool and tap-mode distractors. Add shortcuts by adding `act()` entries to the deck's file; do not special-case keys elsewhere. A new deck file must be imported from `actions/index.js`, and code outside `src/actions/` imports the table from `actions/index.js` so the decks are always registered.
    - Combos are canonical strings: modifiers in the order `super, ctrl, alt, shift`, then the key, e.g. `super+alt+shift+3`. Use `canon()` when writing them.
    - Keys are read from `event.code` (physical key), so Shift+1 is `1` and layouts don't matter.
-   - Modifiers are tracked manually in `held` rather than trusting `event.metaKey` etc. This is what makes the **stand-in Super key** (`CFG.standin`) work. `prune()` drops stale modifiers using the event flags.
+   - Modifiers are tracked manually in `held` rather than trusting `event.metaKey` etc.; `prune()` drops stale modifiers using the event flags.
+   - There is deliberately **no stand-in Super key**: the point is muscle memory for the real key. Don't add one back.
+   - **Can't train here**: `CONFLICTS[platform][combo]` in `input/host.js` lists shortcuts the host OS or browser takes before the page sees them (`d:1` dangerous, e.g. ⌘Q quits the browser; `lock:1` Lock keys gets it through). `blocked(combo)`, `availKeys(a)` and `trainable(a)` read it. Blocked shortcuts are left out of Drill and Blitz, dimmed in Keys, shown in Key setup, and a Learn step whose keys are all blocked gets a "Do it for me" button. The platform is auto-detected and can be overridden in Key setup (`CFG.plat`). Tap mode ignores conflicts.
 
 4. **Coach** (`src/coach/`)
    - `press(combo)` runs the action on the desktop, then calls `after(combo, action)`, which scores against the current Learn step or Drill/Blitz prompt.
-   - **Drill**: `pick()` weights by mastery level 0–5 (`PROG[id].l`), `nextPrompt()` runs the item's `ensure()` so the prompt is always possible, `success()` / `miss()` update levels. Keys are hidden once known and revealed after a delay.
+   - **Drill**: `poolActs()` only includes `trainable()` shortcuts; `pick()` weights by mastery level 0–5 (`PROG[id].l`), `nextPrompt()` runs the item's `ensure()` so the prompt is always possible, `success()` / `miss()` update levels. Keys are hidden once known and revealed after a delay.
    - **Learn**: `LESSONS` is a scripted list of `{say, keys, note, pre}` steps.
    - **Blitz**: Drill with a 60 s timer, speed bonus and combo multiplier.
    - Drill preconditions use helpers `prep`, `trim`, `ensureTiled`, `ensureDir`, `ensureGroup`. Reuse them for new items.
@@ -81,8 +83,8 @@ styles/
 
 ## Must not break
 
-- **Stand-in Super key** and **Lock keys** (fullscreen + `navigator.keyboard.lock()`). Host operating systems grab Super combos; these are the only ways many users can practise.
-- **Platform warnings**: on macOS, Cmd+W/Q close the browser; on Windows, Win+L locks the PC. Key setup opens on first visit, Learn/Drill show `hostWarn()`, and macOS gets a `beforeunload` guard. Keep all three.
+- **Lock keys** (fullscreen + `navigator.keyboard.lock()`); on Windows it frees every `lock:1` conflict.
+- **Can't-train buckets**: the `CONFLICTS` table, Key setup's list (opens on first visit), and the macOS `beforeunload` guard. When you add a binding, check it against macOS and Windows defaults and add a `CONFLICTS` entry if either takes it.
 - **Tap mode** for touch devices. Only a real Super combo may switch it back to keyboard.
 - Light and dark themes, and every `data-om` theme.
 - No horizontal scroll at 390px width.
@@ -95,8 +97,9 @@ Set up once with `npm install && npx playwright install chromium`. Before commit
 1. `npm test` — unit tests (`node:test`, no extra dependencies):
    - `tests/unit/layout.test.js`: dwindle tiles the work area with no gaps or overlaps, splits follow the longer side, scrolling keeps focus visible, `neighbor()` picks the right window.
    - `tests/unit/drills.test.js`: every drill prompt changes the desktop after its `ensure()`. If you add a drill item, this test covers it automatically.
-2. `npm run smoke` — Playwright plays all five lessons, 40 drill prompts and the stand-in Super key with real key events, checks for horizontal scroll at 390px, and fails on any page error.
-3. `npm run dev` and open http://127.0.0.1:8000/#debug. The `#debug` hash exposes `window.__od` (state, `press`, `setMode`, `startLesson`, `lessonKey`, `D`, `L`) for poking at things.
+   - `tests/unit/host.test.js`: every `CONFLICTS` entry is a canonical, bound shortcut; no platform's drill pool contains a blocked shortcut; Lock keys and tap mode behave.
+2. `npm run smoke` — Playwright plays all five lessons and 40 drill prompts on each of Linux, Mac and Windows with real key events (blocked lesson steps via "Do it for me"), opens every mode and Key setup, checks for horizontal scroll at 390px, and fails on any page error.
+3. `npm run dev` and open http://127.0.0.1:8000/#debug. The `#debug` hash exposes `window.__od` (state, `press`, `setMode`, `startLesson`, `lessonKey`, `blocked`, `trainable`, `D`, `L`) for poking at things.
 
 CI runs 1 and 2 on every pull request and before every Pages deploy.
 

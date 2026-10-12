@@ -1,5 +1,5 @@
 import { curWs, cycle, detach, focusId, neighbor, osd, resize, S, slotOf, W } from '../model/desktop.js';
-import { act, OS_NOTE } from './act.js';
+import { act } from './act.js';
 import { ensureDir, ensureTiled } from './ensure.js';
 
 // Tiling, focus, swap, float, full screen and resize (Omarchy manual: Navigation).
@@ -26,5 +26,5 @@ act('grow','tiling',['super+minus'],'Expand window left',()=>resize('h',-1),{ask
 act('shrink','tiling',['super+equal'],'Shrink window left',()=>resize('h',1),{ask:'Shrink the window from the left',ensure:()=>ensureDir('left')});
 act('shrinkv','tiling',['super+shift+minus'],'Shrink window up',()=>resize('v',1),{drill:false});
 act('growv','tiling',['super+shift+equal'],'Expand window down',()=>resize('v',-1),{drill:false});
-act('alttab','tiling',['alt+tab'],'Next window',()=>cycle(1),{ask:'Cycle to the next window on this workspace',os:OS_NOTE,ensure:()=>ensureTiled(2)});
-act('alttabb','tiling',['alt+shift+tab'],'Previous window',()=>cycle(-1),{drill:false,os:OS_NOTE});
+act('alttab','tiling',['alt+tab'],'Next window',()=>cycle(1),{ask:'Cycle to the next window on this workspace',ensure:()=>ensureTiled(2)});
+act('alttabb','tiling',['alt+shift+tab'],'Previous window',()=>cycle(-1),{drill:false});
